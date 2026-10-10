@@ -43,11 +43,11 @@ public sealed class SynergyOverlay : MonoBehaviour
                 _ui?.Show(false); ClearPanels(); _window = null; _lastContext = "";
                 _nextRefresh = 0;
             }
-            // Do not silently persist an accidental F9 press made elsewhere in the game.
-            if (_window && Input.GetKeyDown(KeyCode.F9))
+            // The configured shortcut only acts inside skill selection.
+            if (_window && Plugin.Instance.ToggleKey.Value.IsDown())
             {
                 _visible = !_visible; _nextRefresh = 0;
-                Plugin.Instance.Log.LogInfo($"Skill hints {(_visible ? "shown" : "hidden")} for this session (F9).");
+                Plugin.Instance.Log.LogInfo($"Skill hints {(_visible ? "shown" : "hidden")} for this session ({Plugin.Instance.ToggleKey.Value}).");
             }
             var mouse = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
             if (_visible && Input.mouseScrollDelta.y != 0)

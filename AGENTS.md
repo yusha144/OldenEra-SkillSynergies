@@ -1,5 +1,7 @@
 # Skill Synergies — isolated mod
 
+- Distribution update 0.1.11: the user explicitly requested author yusha144, common configurable hotkeys and a combined installer for all three mods. This authorizes the coordinated packaging work despite older task-specific isolation instructions below; keep the DLLs/configs independently usable and frozen releases untouched. Toggle via `HotkeySettings` and `yusha144.hotkeys.cfg` (F9 default), never a hardcoded key. Shared config is read once at startup and existing comments/other keys must survive.
+
 - User-preserved stable baseline: 0.1.8 (2026-10-10), tag `stable/v0.1.8`, sibling directory/archive `OldenEra-SkillSynergies-STABLE-0.1.8`. Never modify/replace the frozen files or retag this baseline. Develop future versions here, retain all releases, and preserve the installed DLL/config before updating. See `STABLE-BASELINE.md`.
 - This is a separate plugin from Map Hints. Keep GUID `local.oldenera.skillsynergies`, DLL `OldenEra.SkillSynergies.dll`, config and installation directory separate.
 - Do not modify or reinstall Map Hints while working here.
