@@ -14,16 +14,63 @@ internal readonly struct Box
 
 internal static class PanelLayout
 {
-    internal static Box Place(float width, float height, float scale, IReadOnlyList<Box> obstacles, Box anchor = default,
-        Func<float, float> measureHeight = null)
+    internal static Box[] PlaceCards(float width, float height, float scale, IReadOnlyList<Box> obstacles,
+        IReadOnlyList<Box> anchors, Func<int, float, float> measureHeight, IReadOnlyList<Box> choiceRows = null)
     {
-        // Prefer a sidebar; use a shorter panel or footer when the native window is wide.
-        var sizes = new[] { (340f, 380f), (300f, 360f), (280f, 340f), (620f, 250f), (460f, 250f) };
-        return PlaceSizes(width, height, scale, obstacles, sizes, anchor, measureHeight);
+        var placed = new Box[anchors.Count];
+        var occupied = new List<Box>();
+        Box group = Group(choiceRows ?? anchors);
+        float gap = 12 * scale, margin = 8 * scale;
+        // Layout is independent of the pointer and input order. Each next eligible card
+        // reserves its own vertical band, so earlier annotations cannot displace it.
+        foreach (int index in Enumerable.Range(0, anchors.Count).OrderBy(i => anchors[i].Y).ThenBy(i => anchors[i].X))
+        {
+            Box anchor = anchors[index];
+            if (!anchor.Valid) continue;
+            float top = Math.Max(margin, anchor.Y);
+            float bottom = height - margin;
+            foreach (var other in choiceRows ?? anchors)
+                if (other.Valid && other.Y > anchor.Y + scale) bottom = Math.Min(bottom, other.Y - gap);
+            if (bottom - top < 96 * scale) continue;
+            Box best = default; float bestScore = float.PositiveInfinity;
+            var measurements = new Dictionary<float, float>();
+            foreach (float rawWidth in new[] { 340f, 420f, 300f, 260f })
+                foreach (bool right in new[] { true, false })
+                {
+                    // Native button hitboxes and window ornaments can extend past a card.
+                    // Stay at its height, moving just beyond that obstruction when necessary.
+                    var edges = new HashSet<float> { right ? anchor.Right : anchor.X, right ? group.Right : group.X };
+                    foreach (var ob in obstacles)
+                        if (ob.Valid && (right ? ob.Right >= anchor.Right : ob.X <= anchor.X)) edges.Add(right ? ob.Right : ob.X);
+                    foreach (float edge in edges)
+                    {
+                        float free = right ? width - margin - edge - gap : edge - gap - margin;
+                        float w = Math.Min(rawWidth * scale, free);
+                        if (w < 260 * scale) continue;
+                        float x = right ? edge + gap : edge - gap - w;
+                        if (!measurements.TryGetValue(w, out float desired)) measurements[w] = desired = measureHeight(index, w);
+                        if (!float.IsFinite(desired) || desired <= 0) continue;
+                        float h = Math.Min(desired, Math.Min(380 * scale, bottom - top));
+                        var ys = new List<float> { top };
+                        foreach (var ob in obstacles.Concat(occupied))
+                            if (ob.Bottom + gap > top) ys.Add(ob.Bottom + gap);
+                        foreach (float y in ys)
+                        {
+                            var candidate = new Box(x, y, w, h);
+                            if (candidate.X < margin || candidate.Right > width - margin || y < margin || candidate.Bottom > bottom + .25f) continue;
+                            if (obstacles.Any(o => o.Expand(4 * scale).Overlaps(candidate)) || occupied.Any(o => o.Expand(6 * scale).Overlaps(candidate))) continue;
+                            float distance = right ? Math.Abs(x - anchor.Right) : Math.Abs(candidate.Right - anchor.X);
+                            float score = 4 * Math.Abs(y - top) + distance + 10 * (desired - h)
+                                + .1f * Math.Abs(w - 340 * scale) + (right ? 0 : scale);
+                            if (score < bestScore) { best = candidate; bestScore = score; }
+                        }
+                    }
+                }
+            placed[index] = best;
+            if (best.Valid) occupied.Add(best);
+        }
+        return placed;
     }
-
-    internal static Box Status(float width, float height, float scale, IReadOnlyList<Box> obstacles)
-        => PlaceSizes(width, height, scale, obstacles, new[] { (310f, 30f) });
 
     internal static Box CardMark(Box card, float scale)
     {
@@ -38,35 +85,5 @@ internal static class PanelLayout
         if (valid.Length == 0) return default;
         float x = valid.Min(b => b.X), y = valid.Min(b => b.Y);
         return new Box(x, y, valid.Max(b => b.Right) - x, valid.Max(b => b.Bottom) - y);
-    }
-
-    private static Box PlaceSizes(float width, float height, float scale, IReadOnlyList<Box> obstacles, (float, float)[] sizes,
-        Box anchor = default, Func<float, float> measureHeight = null)
-    {
-        float margin = 12 * scale;
-        foreach (var (rawW, rawH) in sizes)
-        {
-            float w = Math.Min(rawW * scale, width - 2 * margin), h = rawH * scale;
-            if (measureHeight != null) h = Math.Min(h, measureHeight(w));
-            if (w <= 0 || h <= 0 || h > height - 2 * margin) continue;
-            var xs = new List<float> { width - w - margin, margin };
-            var ys = new List<float> { (height - h) / 2, height - h - margin, margin };
-            float idealX = anchor.Right + margin, idealY = Math.Clamp(anchor.Y, margin, height - h - margin);
-            if (anchor.Valid) { xs.Add(idealX); xs.Add(anchor.X - w - margin); ys.Add(idealY); }
-            foreach (var ob in obstacles) { xs.Add(ob.Right + margin); xs.Add(ob.X - w - margin); ys.Add(ob.Bottom + margin); ys.Add(ob.Y - h - margin); }
-            Box best = default; float bestScore = float.PositiveInfinity;
-            foreach (float x in xs)
-                foreach (float y in ys)
-                {
-                    var candidate = new Box(x, y, w, h);
-                    if (x < margin || y < margin || candidate.Right > width - margin || candidate.Bottom > height - margin) continue;
-                    if (obstacles.Any(o => o.Expand(4 * scale).Overlaps(candidate))) continue;
-                    if (!anchor.Valid) return candidate;
-                    float score = Math.Abs(x - idealX) + Math.Abs(y - idealY);
-                    if (score < bestScore) { best = candidate; bestScore = score; }
-                }
-            if (best.Valid) return best;
-        }
-        return default; // Never cover a choice or button when no safe space exists.
     }
 }

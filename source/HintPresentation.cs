@@ -16,7 +16,8 @@ internal sealed class HintRow
 
 internal sealed class HintPanel
 {
-    internal string Title, Subtitle;
+    internal string ChoiceId;
+    internal Box Anchor;
     internal readonly List<HintRow> Rows = new();
 }
 
@@ -31,60 +32,35 @@ internal static class HintPresentation
         return ids;
     }
 
-    internal static HintPanel Build(IReadOnlyList<ChoiceHint> choices, ChoiceHint selected, SynergyCatalog catalog, HeroBuild hero)
+    internal static List<HintPanel> ForChoices(IReadOnlyList<ChoiceHint> choices, SynergyCatalog catalog, HeroBuild hero)
     {
-        var panel = new HintPanel();
-        if (selected != null)
+        var result = new List<HintPanel>();
+        foreach (var choice in choices)
         {
-            panel.Title = catalog.Info(selected.Id).NameAt(selected.Level);
-            panel.Subtitle = selected.Hints.Count == 0 ? "С текущими умениями усилений нет"
-                : selected.IsPerk ? "Бонус с вашими навыками" : "Усилит ваши перки";
-            foreach (string id in Related(selected))
-            {
-                var info = catalog.Info(id);
-                bool temporary = !selected.IsPerk && selected.Hints.Any(h => h.Link.PerkId == id && h.Temporary);
-                string parent = selected.IsPerk ? null : catalog.ParentOf(id, hero);
-                string source = parent == null ? "" : "Из навыка: " + catalog.Info(parent).NameAt(hero.Level(parent));
-                if (temporary) source += (source.Length == 0 ? "" : "\n") + "Временный перк";
-                var related = selected.Hints.Where(h => selected.IsPerk ? h.Link.RequiredSkills.Contains(id) : h.Link.PerkId == id).ToList();
-                panel.Rows.Add(new HintRow { Icon = info.IconAt(hero.Level(id)), Name = info.NameAt(hero.Level(id)), Note = source,
-                    Effect = BonusText.Preview(related, selected.Hints, catalog.Links, hero, selected.IsPerk) });
-            }
-            return panel;
+            var panel = Build(choice, catalog, hero);
+            if (panel != null) result.Add(panel);
         }
-        panel.Title = "Доступные сочетания";
-        panel.Subtitle = "Среди предлагаемых вариантов";
-        foreach (var choice in choices.Where(c => c.Hints.Count > 0))
-        {
-            var info = catalog.Info(choice.Id);
-            var names = new List<string>();
-            foreach (string id in Related(choice))
-            {
-                bool temporary = !choice.IsPerk && choice.Hints.Any(h => h.Link.PerkId == id && h.Temporary);
-                names.Add(catalog.Info(id).Name + (temporary ? " (временно)" : ""));
-            }
-            panel.Rows.Add(new HintRow { Icon = info.IconAt(choice.Level), Name = info.NameAt(choice.Level),
-                Note = (choice.IsPerk ? "Усилен: " : "Усилит: ") + string.Join(", ", names) });
-        }
-        if (panel.Rows.Count == 0) { panel.Title = "Сейчас усилений нет"; panel.Subtitle = "Среди предлагаемых вариантов"; }
-        return panel;
+        return result;
     }
-}
 
-internal sealed class HintSelection
-{
-    internal string Id = "";
-    private string _context = "";
-    internal void Clear() { Id = ""; _context = ""; }
-    internal bool Observe(string context, string hoveredId, IEnumerable<string> visibleIds)
+    internal static HintPanel Build(ChoiceHint choice, SynergyCatalog catalog, HeroBuild hero)
     {
-        string previous = Id;
-        bool changed = context != _context;
-        if (changed) { Id = ""; _context = context; }
-        if (!string.IsNullOrEmpty(hoveredId)) Id = hoveredId;
-        if (!visibleIds.Contains(Id)) Id = "";
-        // Crossing the gap, entering the panel, and scrolling do not clear the last hovered choice.
-        return changed || previous != Id;
+        if (choice == null || choice.Hints.Count == 0) return null;
+        var panel = new HintPanel { ChoiceId = choice.Id, Anchor = choice.Bounds };
+        // The adjacent native card already names the offered ability. Only its acquired
+        // partners, their source and numeric effects belong in this attached annotation.
+        foreach (string id in Related(choice))
+        {
+            var info = catalog.Info(id);
+            bool temporary = !choice.IsPerk && choice.Hints.Any(h => h.Link.PerkId == id && h.Temporary);
+            string parent = choice.IsPerk ? null : catalog.ParentOf(id, hero);
+            string source = parent == null ? "" : "Из навыка: " + catalog.Info(parent).NameAt(hero.Level(parent));
+            if (temporary) source += (source.Length == 0 ? "" : "\n") + "Временный перк";
+            var related = choice.Hints.Where(h => choice.IsPerk ? h.Link.RequiredSkills.Contains(id) : h.Link.PerkId == id).ToList();
+            panel.Rows.Add(new HintRow { Icon = info.IconAt(hero.Level(id)), Name = info.NameAt(hero.Level(id)), Note = source,
+                Effect = BonusText.Preview(related, choice.Hints, catalog.Links, hero, choice.IsPerk) });
+        }
+        return panel.Rows.Count > 0 ? panel : null;
     }
 }
 

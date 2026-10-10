@@ -14,10 +14,14 @@ public sealed class SynergyOverlay : MonoBehaviour
     private IntPtr _owner;
     private float _nextRefresh, _nextError, _nextLayoutLog, _nextDiagnostic;
     private bool _started, _visible;
-    private int _page = 1;
-    private Box _panelBox;
     private string _lastContext = "", _lastDiagnostic = "";
-    private readonly HintSelection _selection = new();
+    private sealed class ChoiceView
+    {
+        internal NativeUi Ui;
+        internal Box Bounds;
+        internal int Page = 1;
+    }
+    private readonly Dictionary<string, ChoiceView> _panels = new();
     private readonly Il2CppSystem.Collections.Generic.List<BhLevelUpSkillView> _skills = new();
     private readonly Il2CppSystem.Collections.Generic.List<BhLevelUpSubSkillView> _perks = new();
     private readonly Il2CppSystem.Collections.Generic.List<Button> _buttons = new();
@@ -36,7 +40,7 @@ public sealed class SynergyOverlay : MonoBehaviour
             }
             if (_window && !IsVisible(_window))
             {
-                _ui?.Show(false); _window = null; _selection.Clear(); _lastContext = ""; _panelBox = default;
+                _ui?.Show(false); ClearPanels(); _window = null; _lastContext = "";
                 _nextRefresh = 0;
             }
             // Do not silently persist an accidental F9 press made elsewhere in the game.
@@ -46,10 +50,15 @@ public sealed class SynergyOverlay : MonoBehaviour
                 Plugin.Instance.Log.LogInfo($"Skill hints {(_visible ? "shown" : "hidden")} for this session (F9).");
             }
             var mouse = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
-            if (_panelBox.Contains(mouse.x, mouse.y) && Input.mouseScrollDelta.y != 0)
+            if (_visible && Input.mouseScrollDelta.y != 0)
             {
-                _page += Input.mouseScrollDelta.y > 0 ? -1 : 1;
-                _nextRefresh = 0; // Do not miss one-frame scroll events between model refreshes.
+                foreach (var panel in _panels.Values)
+                    if (panel.Bounds.Valid && panel.Bounds.Contains(mouse.x, mouse.y))
+                    {
+                        panel.Page += Input.mouseScrollDelta.y > 0 ? -1 : 1;
+                        _nextRefresh = 0;
+                        break;
+                    }
             }
             if (Time.unscaledTime < _nextRefresh) return;
             _nextRefresh = Time.unscaledTime + 0.12f;
@@ -133,9 +142,10 @@ public sealed class SynergyOverlay : MonoBehaviour
         { _ui?.Show(false); Diagnostic("Registered level-up window is open; native font is not ready."); return; }
         if (_ui == null || !_ui.Root || _owner != window.Pointer)
         {
+            ClearPanels();
             _ui?.Destroy();
             _ui = new NativeUi(window.transform.Cast<RectTransform>(), sample);
-            _owner = window.Pointer; _selection.Clear(); _panelBox = default;
+            _owner = window.Pointer; _lastContext = "";
             Diagnostic($"Attached skill hints to registered level-up window; arena={window.cilk}, legacy singleton present={(bool)BhLevelUpView.cild}.");
         }
         _ui.Show(true);
@@ -154,7 +164,7 @@ public sealed class SynergyOverlay : MonoBehaviour
         window.GetComponentsInChildren<BhLevelUpSubSkillView>(false, _perks);
         window.GetComponentsInChildren<Button>(false, _buttons);
         // Only the current stage's choice list; nested preview icons and old animation stages
-        // must not become additional offers or alter the panel context while hovering.
+        // must not become additional offers or create duplicate annotations.
         _choicePointers.Clear();
         bool skillStage = window.cile?.chpe?.TryCast<dzq>() != null;
         bool perkStage = window.cile?.chpe?.TryCast<dzr>() != null;
@@ -187,41 +197,49 @@ public sealed class SynergyOverlay : MonoBehaviour
             + ":" + string.Join(",", hero.TemporaryPerks.OrderBy(id => id));
         if (context != _lastContext)
         {
+            ClearPanels();
             _lastContext = context;
             Plugin.Instance.Log.LogInfo($"Level-up hints: hero {data.id}, arena={window.cilk}, learned perks={hero.Perks.Count}, offers={_offers.Count}, related offers={_offers.Count(o => o.Hints.Count > 0)}, visible={_visible}.");
         }
         float scale = Math.Clamp(Screen.height / 1080f, 0.75f, 2f);
-        var mouse = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
-        ChoiceHint hovered = _offers.LastOrDefault(offer => offer.Bounds.Contains(mouse.x, mouse.y));
-        if (_selection.Observe(context, hovered?.Id, _offers.Select(o => o.Id))) _page = 1;
-        ChoiceHint selected = _offers.FirstOrDefault(offer => offer.Id == _selection.Id);
+        foreach (var panel in _panels.Values) { panel.Ui.Show(false); panel.Bounds = default; }
         _ui.Begin();
         foreach (var offer in _offers.Where(o => _visible && o.Hints.Count > 0))
-            _ui.Mark(offer.Bounds, scale, offer == selected);
+            _ui.Mark(offer.Bounds, scale);
         _ui.End();
         if (!_visible)
         {
-            _panelBox = default;
             _ui.Show(false);
             return;
         }
-        var content = HintPresentation.Build(_offers, selected, Plugin.Instance.Catalog, hero);
-        if (_offers.Count == 0) { content.Title = "Выбор умений"; content.Subtitle = "Ожидаю варианты…"; }
-        var anchor = PanelLayout.Group(_offers.Select(offer => offer.Bounds));
-        _panelBox = PanelLayout.Place(Screen.width, Screen.height, scale, _obstacles, anchor,
-            width => _ui.MeasureHeight(width, scale, content));
-        if (!_panelBox.Valid && Time.unscaledTime >= _nextLayoutLog)
+        var contents = HintPresentation.ForChoices(_offers, Plugin.Instance.Catalog, hero);
+        if (contents.Count == 0) { _ui.Show(false); return; }
+        foreach (var content in contents)
         {
-            Plugin.Instance.Log.LogWarning("No unobstructed space for synergy details; applicable choice marks remain visible.");
+            if (!_panels.ContainsKey(content.ChoiceId))
+                _panels[content.ChoiceId] = new ChoiceView { Ui = new NativeUi(_ui.Root, sample, "ChoiceSynergy." + content.ChoiceId) };
+            _panels[content.ChoiceId].Ui.Show(true);
+        }
+        var boxes = PanelLayout.PlaceCards(Screen.width, Screen.height, scale, _obstacles, contents.Select(c => c.Anchor).ToArray(),
+            (index, width) => _panels[contents[index].ChoiceId].Ui.MeasureHeight(width, scale, contents[index]), _offers.Select(o => o.Bounds).ToArray());
+        for (int i = 0; i < contents.Count; i++)
+        {
+            var panel = _panels[contents[i].ChoiceId]; panel.Bounds = boxes[i];
+            panel.Ui.Show(boxes[i].Valid);
+            if (boxes[i].Valid) panel.Ui.Panel(boxes[i], scale, contents[i], ref panel.Page);
+        }
+        if (boxes.Any(box => !box.Valid) && Time.unscaledTime >= _nextLayoutLog)
+        {
+            Plugin.Instance.Log.LogWarning("No unobstructed adjacent space for some synergy cards; their native-card marks remain visible.");
             _nextLayoutLog = Time.unscaledTime + 30;
         }
-        if (!_panelBox.Valid)
-        {
-            _panelBox = PanelLayout.Status(Screen.width, Screen.height, scale, _obstacles);
-            _ui.Status(_panelBox, scale, "Сочетания: нет места для панели");
-            return;
-        }
-        _ui.Panel(_panelBox, scale, content, ref _page);
+    }
+
+    [HideFromIl2Cpp]
+    private void ClearPanels()
+    {
+        foreach (var panel in _panels.Values) { panel.Ui.Show(false); panel.Ui.Destroy(); }
+        _panels.Clear();
     }
 
     [HideFromIl2Cpp]
@@ -240,5 +258,5 @@ public sealed class SynergyOverlay : MonoBehaviour
         if (bounds.Valid && !(bounds.W > Screen.width * 0.95f && bounds.H > Screen.height * 0.85f)) _obstacles.Add(bounds);
         return bounds;
     }
-    public void OnDestroy() { _ui?.Destroy(); }
+    public void OnDestroy() { ClearPanels(); _ui?.Destroy(); }
 }

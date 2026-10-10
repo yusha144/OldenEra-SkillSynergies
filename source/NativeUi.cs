@@ -11,9 +11,7 @@ internal sealed class NativeUi
 {
     internal readonly RectTransform Root;
     internal readonly Image Frame;
-    internal readonly TextMeshProUGUI Header, Body, Footer;
-    private readonly TextMeshProUGUI _subtitle;
-    private readonly Image _headingRule;
+    private readonly TextMeshProUGUI _footer;
     private readonly RectTransform _panel;
     private readonly RectTransform _rowViewport;
     private readonly TMP_FontAsset _font;
@@ -22,7 +20,6 @@ internal sealed class NativeUi
     private readonly List<RowView> _rows = new();
     private readonly Dictionary<string, Sprite> _sprites = new();
     private int _markCount;
-    private float _titleHeight, _subtitleHeight, _rowsOffset;
     private readonly Il2CppStructArray<Vector3> _corners = new(4);
     private sealed class RowView
     {
@@ -32,24 +29,20 @@ internal sealed class NativeUi
         internal float Height, NameHeight, NoteHeight, EffectHeight, EffectOffset;
     }
 
-    internal NativeUi(RectTransform parent, TextMeshProUGUI sample)
+    internal NativeUi(RectTransform parent, TextMeshProUGUI sample, string name = "SkillSynergies.LocalHints")
     {
         _font = sample.font; _fontMaterial = sample.fontSharedMaterial;
-        Root = CreateRect("SkillSynergies.LocalHints", parent);
+        Root = CreateRect(name, parent);
         Root.anchorMin = Vector2.zero; Root.anchorMax = Vector2.one; Root.offsetMin = Vector2.zero; Root.offsetMax = Vector2.zero;
         var group = Root.gameObject.AddComponent<CanvasGroup>(); group.blocksRaycasts = false; group.interactable = false;
         _panel = CreateRect("Combinations", Root);
         Frame = _panel.gameObject.AddComponent<Image>(); Frame.color = new Color(0.045f, 0.07f, 0.11f, 1); Frame.raycastTarget = false;
         var outline = Inset("BrassOutline", _panel, 1, new Color(0.54f, 0.48f, 0.33f, 1));
         Inset("BlueSlate", outline, 1, new Color(0.14f, 0.18f, 0.25f, 1));
-        Header = CreateText("Heading", _panel); Header.color = new Color(0.86f, 0.75f, 0.48f);
-        Body = CreateText("ChoiceName", _panel);
-        _subtitle = CreateText("RelationDirection", _panel); _subtitle.color = new Color(0.75f, 0.77f, 0.77f);
-        _headingRule = CreateRect("HeadingRule", _panel).gameObject.AddComponent<Image>();
-        _headingRule.color = new Color(0.57f, 0.50f, 0.33f, 0.65f); _headingRule.raycastTarget = false;
-        Footer = CreateText("Navigation", _panel); Footer.color = new Color(0.66f, 0.68f, 0.73f);
+        _footer = CreateText("Navigation", _panel); _footer.color = new Color(0.66f, 0.68f, 0.73f);
         _rowViewport = CreateRect("RelationsViewport", _panel);
         _rowViewport.gameObject.AddComponent<RectMask2D>();
+        _panel.gameObject.SetActive(false);
     }
 
     internal void Begin() { _markCount = 0; }
@@ -62,8 +55,11 @@ internal sealed class NativeUi
 
     internal float MeasureHeight(float width, float scale, HintPanel content)
     {
-        Prepare(content, width - 32 * scale, scale);
-        float height = _rowsOffset + 20 * scale;
+        // Initialize native TMP components before measuring new rows; final visibility is
+        // assigned by the layout pass before Unity renders the frame.
+        _panel.gameObject.SetActive(true);
+        Prepare(content, width - 24 * scale, scale);
+        float height = 20 * scale;
         for (int i = 0; i < content.Rows.Count; i++) height += _rows[i].Height;
         return height;
     }
@@ -71,12 +67,6 @@ internal sealed class NativeUi
     private void Prepare(HintPanel content, float width, float scale)
     {
         float units = UnitsPerPixel(Root);
-        SetText(Header, "СОЧЕТАНИЯ", 13 * scale, units);
-        SetText(Body, content.Title, 16 * scale, units);
-        SetText(_subtitle, content.Subtitle, 12 * scale, units);
-        _titleHeight = TextHeight(Body, width, units);
-        _subtitleHeight = TextHeight(_subtitle, width, units);
-        _rowsOffset = 48 * scale + _titleHeight + _subtitleHeight;
         for (int i = 0; i < content.Rows.Count; i++)
         {
             if (i == _rows.Count) _rows.Add(CreateRow());
@@ -97,17 +87,11 @@ internal sealed class NativeUi
     {
         _panel.gameObject.SetActive(box.Valid);
         if (!box.Valid) return;
-        Body.gameObject.SetActive(true); Footer.gameObject.SetActive(true); _subtitle.gameObject.SetActive(true); _headingRule.gameObject.SetActive(true);
         Position(_panel, box);
         float units = UnitsPerPixel(Root);
-        float x = box.X + 16 * scale, width = box.W - 32 * scale;
+        float x = box.X + 12 * scale, width = box.W - 24 * scale;
         Prepare(content, width, scale);
-        Position(Header.rectTransform, new Box(x, box.Y + 12 * scale, width, 18 * scale));
-        Position(_headingRule.rectTransform, new Box(x, box.Y + 33 * scale, width, scale));
-        Position(Body.rectTransform, new Box(x, box.Y + 40 * scale, width, _titleHeight));
-        float subtitleY = box.Y + 44 * scale + _titleHeight;
-        Position(_subtitle.rectTransform, new Box(x, subtitleY, width, _subtitleHeight));
-        float top = box.Y + _rowsOffset + 8 * scale;
+        float top = box.Y + 8 * scale;
         float available = Math.Max(32 * scale, box.Bottom - 12 * scale - top);
         var fullHeights = new List<float>();
         for (int i = 0; i < content.Rows.Count; i++) fullHeights.Add(_rows[i].Height);
@@ -121,7 +105,7 @@ internal sealed class NativeUi
             // Keep unusually long labels in one item instead of splitting a relation across pages.
             if (row.Height > available)
             {
-                float fit = Math.Min(1, (available - 24 * scale) / (row.NameHeight + row.NoteHeight + row.EffectHeight));
+                float fit = Math.Clamp((available - 24 * scale) / (row.NameHeight + row.NoteHeight + row.EffectHeight), 0.5f, 1f);
                 SetText(row.Name, data.Name, 16 * scale * fit, units);
                 SetText(row.Note, data.Note, 12 * scale * fit, units);
                 SetText(row.Effect, data.Effect, 14 * scale * fit, units);
@@ -151,23 +135,12 @@ internal sealed class NativeUi
             row.Rule.gameObject.SetActive(i < shown.Start + shown.Count - 1);
             y += row.Height;
         }
-        Position(Footer.rectTransform, new Box(x, box.Bottom - 23 * scale, width, 16 * scale));
-        Footer.gameObject.SetActive(pages.Count > 1);
-        SetText(Footer, pages.Count > 1 ? $"{page}/{pages.Count} · колёсико над панелью" : "", 10 * scale, units);
+        Position(_footer.rectTransform, new Box(x, box.Bottom - 23 * scale, width, 16 * scale));
+        _footer.gameObject.SetActive(pages.Count > 1);
+        SetText(_footer, pages.Count > 1 ? $"{page}/{pages.Count} · колёсико над панелью" : "", 10 * scale, units);
     }
 
-    internal void Status(Box box, float scale, string text)
-    {
-        _panel.gameObject.SetActive(box.Valid);
-        if (!box.Valid) return;
-        Body.gameObject.SetActive(false); Footer.gameObject.SetActive(false); _subtitle.gameObject.SetActive(false); _headingRule.gameObject.SetActive(false);
-        foreach (var row in _rows) row.Root.gameObject.SetActive(false);
-        Position(_panel, box);
-        Position(Header.rectTransform, new Box(box.X + 8 * scale, box.Y + 5 * scale, box.W - 16 * scale, box.H - 10 * scale));
-        SetText(Header, text, 13 * scale, UnitsPerPixel(Root));
-    }
-
-    internal void Mark(Box card, float scale, bool selected)
+    internal void Mark(Box card, float scale)
     {
         if (_markCount == _marks.Count)
         {
@@ -179,7 +152,7 @@ internal sealed class NativeUi
         var box = PanelLayout.CardMark(card, scale);
         mark.gameObject.SetActive(box.Valid); if (!box.Valid) return;
         Position(mark.rectTransform, box);
-        mark.color = selected ? new Color(1, 0.86f, 0.52f, 1) : new Color(0.82f, 0.67f, 0.37f, 0.95f);
+        mark.color = new Color(0.82f, 0.67f, 0.37f, 0.95f);
     }
 
     private RowView CreateRow()
