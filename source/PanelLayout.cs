@@ -51,19 +51,15 @@ internal static class PanelLayout
                         if (!measurements.TryGetValue(w, out float desired)) measurements[w] = desired = measureHeight(index, w);
                         if (!float.IsFinite(desired) || desired <= 0) continue;
                         float h = Math.Min(desired, Math.Min(380 * scale, bottom - top));
-                        var ys = new List<float> { top };
-                        foreach (var ob in obstacles.Concat(occupied))
-                            if (ob.Bottom + gap > top) ys.Add(ob.Bottom + gap);
-                        foreach (float y in ys)
-                        {
-                            var candidate = new Box(x, y, w, h);
-                            if (candidate.X < margin || candidate.Right > width - margin || y < margin || candidate.Bottom > bottom + .25f) continue;
-                            if (obstacles.Any(o => o.Expand(4 * scale).Overlaps(candidate)) || occupied.Any(o => o.Expand(6 * scale).Overlaps(candidate))) continue;
-                            float distance = right ? Math.Abs(x - anchor.Right) : Math.Abs(candidate.Right - anchor.X);
-                            float score = 4 * Math.Abs(y - top) + distance + 10 * (desired - h)
-                                + .1f * Math.Abs(w - 340 * scale) + (right ? 0 : scale);
-                            if (score < bestScore) { best = candidate; bestScore = score; }
-                        }
+                        // Never move down to dodge a control: that could associate the
+                        // explanation with another choice. Try another width/side instead.
+                        var candidate = new Box(x, top, w, h);
+                        if (candidate.X < margin || candidate.Right > width - margin || candidate.Bottom > bottom + .25f) continue;
+                        if (obstacles.Any(o => o.Expand(4 * scale).Overlaps(candidate)) || occupied.Any(o => o.Expand(6 * scale).Overlaps(candidate))) continue;
+                        float distance = right ? Math.Abs(x - anchor.Right) : Math.Abs(candidate.Right - anchor.X);
+                        float score = distance + 10 * (desired - h)
+                            + .1f * Math.Abs(w - 340 * scale) + (right ? 0 : scale);
+                        if (score < bestScore) { best = candidate; bestScore = score; }
                     }
                 }
             placed[index] = best;

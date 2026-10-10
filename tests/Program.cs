@@ -121,7 +121,7 @@ var nightOffer = new ChoiceHint { Id = "arena_skill_magic_night", Level = 2, Hin
 Check(HintPresentation.Build(nightOffer, catalog, corkOwner).Rows.Single().Effect.Contains("с +20% до +40%"), "Cork also shows numeric effects in the reverse direction");
 var taxChoice = new ChoiceHint { Id = "skill_logistic", IsPerk = false, Hints = SynergyRules.ForOffer(catalog.Links, taxHero, "skill_logistic", false) };
 var taxPanel = HintPresentation.Build(taxChoice, catalog, taxHero);
-Check(taxPanel.Rows.Single().Name == "Сборщик податей", "Reverse direction identifies the owned perk improved by an offered skill");
+Check(taxPanel.Rows.Single().Name == "Усилит ваш перк: Сборщик податей", "Reverse direction explicitly identifies the owned perk improved by this choice");
 Check(taxPanel.Rows.Single().Effect == "Золото: с +250 до +500 в день.", "Owned perk details show the extra benefit absent from the offered main skill description");
 Check(HintPresentation.ForChoices([], catalog, taxHero).Count == 0, "No offered choices means no annotations");
 
@@ -137,7 +137,7 @@ foreach (string prefix in new[] { "", "arena_", "campaign_" })
         Hints = SynergyRules.ForOffer(catalog.Links, leader, prefix + "skill_leadership", false) };
     var shown = HintPresentation.Build(formation, catalog, leader);
     var row = shown.Rows.Single();
-    Check(row.Name == "Решимость" && row.Note == "Из навыка: Продвинутое лидерство", prefix + "Actual acquired parent skill level is shown");
+    Check(row.Name == "Усилит ваш перк: Решимость" && row.Note == "Источник перка: Продвинутое лидерство", prefix + "Actual acquired parent skill level is distinguished from the activating choice");
     Check(row.Effect.Contains("с +1% до +2%") && row.Effect.Contains("за единицу боевого духа") && row.Effect.Contains("дружественных"), prefix + "Resoluteness retains exact before/after, target and per-morale restriction");
     Check(shown.ChoiceId == formation.Id && shown.Rows.All(r => r.Name != catalog.Info(formation.Id).NameAt(2)), prefix + "Activating offer is distinguished from the owned perk's parent");
     Check(leadership.Hints.Count == 0 && leader.Level(prefix + "skill_leadership") == 2 && !leader.Skills.Contains(formation.Id), prefix + "Preview never acquires either offered skill or substitutes offered level for current level");
@@ -146,6 +146,40 @@ foreach (string prefix in new[] { "", "arena_", "campaign_" })
 }
 var unrelated = new HeroBuild(); unrelated.AddSkill("arena_skill_leadership", 2);
 Check(catalog.ParentOf("sub_skill_leadership_1", unrelated) == null, "Parent lookup cannot cross game modes");
+// Lord Rufus screenshots: Arcane Magic owns Endless Life, but learning Summoning
+// is what activates the healing increase. Upgrading Arcane is not that condition.
+foreach (string prefix in new[] { "", "arena_", "campaign_" })
+{
+    string arcaneId = prefix + "skill_magic_space", summonerId = prefix + "skill_summoner";
+    string lifeId = prefix + "sub_skill_magic_space_2";
+    var healer = new HeroBuild(); healer.AddSkill(arcaneId, 2); healer.AddPerk(lifeId, 2, arcaneId);
+    var healing = catalog.Links.Single(l => l.PerkId == lifeId);
+    Check(healing.RequiredSkills.SequenceEqual([summonerId]), prefix + "Endless Life requires Summoning, not another Arcane level");
+    Check(SynergyRules.ForOffer(catalog.Links, healer, arcaneId, false).Count == 0,
+        prefix + "Offering Expert Arcane does not newly double the owned healing perk");
+    var summoningHints = SynergyRules.ForOffer(catalog.Links, healer, summonerId, false);
+    Check(summoningHints.Count == 1 && summoningHints[0].Link.PerkId == lifeId && healing.Effect.Contains("с +30% до +60%"),
+        prefix + "Offering Summoning doubles the owned healing perk from 30 to 60 percent");
+    var summon = new ChoiceHint { Id = summonerId, Level = 2, Bounds = new Box(94, 659, 886, 229), Hints = summoningHints };
+    var arcane = new ChoiceHint { Id = arcaneId, Level = 3, Bounds = new Box(94, 925, 886, 229),
+        Hints = SynergyRules.ForOffer(catalog.Links, healer, arcaneId, false) };
+    var healingPanel = HintPresentation.ForChoices([summon, arcane], catalog, healer).Single();
+    Check(healingPanel.ChoiceId == summonerId && healingPanel.Anchor.Y == summon.Bounds.Y,
+        prefix + "Screenshot annotation belongs to the activating Summoning card, not its owned Arcane source");
+    Check(healingPanel.Rows.Single().Name == "Усилит ваш перк: Всякая жизнь бесконечна"
+        && healingPanel.Rows.Single().Note == "Источник перка: Продвинутая арканная магия",
+        prefix + "Screenshot wording distinguishes the upgraded perk from its current source skill");
+    var healingBox = PanelLayout.PlaceCards(1521, 1195, 1195f / 1080, [summon.Bounds, arcane.Bounds], [healingPanel.Anchor],
+        (_, _) => 240, [summon.Bounds, arcane.Bounds]).Single();
+    Check(healingBox.Valid && healingBox.Y == summon.Bounds.Y && healingBox.Bottom < arcane.Bounds.Y,
+        prefix + "Screenshot healing explanation stays at the activating card and does not spill into Arcane");
+    healer.AddSkill(arcaneId, 3);
+    Check(SynergyRules.ForOffer(catalog.Links, healer, summonerId, false).Count == 1,
+        prefix + "Taking Expert Arcane leaves the Summoning combination available at the next level");
+    healer.AddSkill(summonerId, 2);
+    Check(SynergyRules.ForOffer(catalog.Links, healer, summonerId, false).Count == 0,
+        prefix + "Once Summoning is learned its already active healing bonus is not promised again");
+}
 var ambiguousCatalog = new SynergyCatalog(); ambiguousCatalog.PerkParents["p"] = ["a", "b"];
 var ambiguousHero = new HeroBuild(); ambiguousHero.AddSkill("a", 2); ambiguousHero.AddSkill("b", 1);
 Check(ambiguousCatalog.ParentOf("p", ambiguousHero) == null, "Ambiguous parent is not invented");
@@ -227,6 +261,8 @@ var unmatchedBelow = new Box(100,500,700,180);
 var boundedAnnotation = PanelLayout.PlaceCards(1280,800,1,[insetCard,unmatchedBelow],[insetCard],(_,_)=>350,[insetCard,unmatchedBelow])[0];
 Check(boundedAnnotation.Valid && boundedAnnotation.Bottom <= unmatchedBelow.Y - 12,
     "A long annotation does not spill into an unmatched choice's row and suggest a false association");
+Check(!PanelLayout.PlaceCards(1280,800,1,[insetCard,new Box(800,280,480,80)],[insetCard],(_,_)=>100)[0].Valid,
+    "Blocked card-height space cannot push the explanation lower beside a different native choice");
 
 var rowPages = RowPagination.Split([70, 70, 70], 150);
 Check(rowPages.Count == 2 && rowPages[0].Start == 0 && rowPages[0].Count == 2 && rowPages[1].Start == 2 && rowPages[1].Count == 1, "Names and explanations stay together when paging");

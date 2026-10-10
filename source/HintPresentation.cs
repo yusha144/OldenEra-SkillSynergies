@@ -54,10 +54,11 @@ internal static class HintPresentation
             var info = catalog.Info(id);
             bool temporary = !choice.IsPerk && choice.Hints.Any(h => h.Link.PerkId == id && h.Temporary);
             string parent = choice.IsPerk ? null : catalog.ParentOf(id, hero);
-            string source = parent == null ? "" : "Из навыка: " + catalog.Info(parent).NameAt(hero.Level(parent));
+            string source = parent == null ? "" : "Источник перка: " + catalog.Info(parent).NameAt(hero.Level(parent));
             if (temporary) source += (source.Length == 0 ? "" : "\n") + "Временный перк";
             var related = choice.Hints.Where(h => choice.IsPerk ? h.Link.RequiredSkills.Contains(id) : h.Link.PerkId == id).ToList();
-            panel.Rows.Add(new HintRow { Icon = info.IconAt(hero.Level(id)), Name = info.NameAt(hero.Level(id)), Note = source,
+            string name = (choice.IsPerk ? "" : "Усилит ваш перк: ") + info.NameAt(hero.Level(id));
+            panel.Rows.Add(new HintRow { Icon = info.IconAt(hero.Level(id)), Name = name, Note = source,
                 Effect = BonusText.Preview(related, choice.Hints, catalog.Links, hero, choice.IsPerk) });
         }
         return panel.Rows.Count > 0 ? panel : null;
