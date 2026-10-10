@@ -21,20 +21,20 @@ internal static class PanelLayout
         var occupied = new List<Box>();
         Box group = Group(choiceRows ?? anchors);
         float gap = 12 * scale, margin = 8 * scale;
-        // Layout is independent of the pointer and input order. Each next eligible card
-        // reserves its own vertical band, so earlier annotations cannot displace it.
+        // Keep the top at the activating card. Empty neighbouring annotation rows may
+        // provide height, but every later matching choice reserves its own space.
         foreach (int index in Enumerable.Range(0, anchors.Count).OrderBy(i => anchors[i].Y).ThenBy(i => anchors[i].X))
         {
             Box anchor = anchors[index];
             if (!anchor.Valid) continue;
             float top = Math.Max(margin, anchor.Y);
             float bottom = height - margin;
-            foreach (var other in choiceRows ?? anchors)
+            foreach (var other in anchors)
                 if (other.Valid && other.Y > anchor.Y + scale) bottom = Math.Min(bottom, other.Y - gap);
             if (bottom - top < 96 * scale) continue;
             Box best = default; float bestScore = float.PositiveInfinity;
             var measurements = new Dictionary<float, float>();
-            foreach (float rawWidth in new[] { 420f, 500f, 340f, 300f, 260f })
+            foreach (float rawWidth in new[] { 420f, 500f, 580f, 340f, 300f, 260f })
                 foreach (bool right in new[] { true, false })
                 {
                     // Native button hitboxes and window ornaments can extend past a card.
@@ -50,7 +50,15 @@ internal static class PanelLayout
                         float x = right ? edge + gap : edge - gap - w;
                         if (!measurements.TryGetValue(w, out float desired)) measurements[w] = desired = measureHeight(index, w);
                         if (!float.IsFinite(desired) || desired <= 0) continue;
-                        float h = Math.Min(desired, Math.Min(380 * scale, bottom - top));
+                        float available = bottom - top;
+                        foreach (var obstacle in obstacles)
+                        {
+                            var blocked = obstacle.Expand(4 * scale);
+                            if (obstacle.Valid && x < blocked.Right && x + w > blocked.X && blocked.Y > top)
+                                available = Math.Min(available, blocked.Y - top);
+                        }
+                        if (available < Math.Min(desired, 96 * scale)) continue;
+                        float h = Math.Min(desired, available);
                         // Never move down to dodge a control: that could associate the
                         // explanation with another choice. Try another width/side instead.
                         var candidate = new Box(x, top, w, h);

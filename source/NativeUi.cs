@@ -62,7 +62,7 @@ internal sealed class NativeUi
         // assigned by the layout pass before Unity renders the frame.
         _panel.gameObject.SetActive(true);
         Prepare(content, width - 32 * scale, scale);
-        float height = 20 * scale;
+        float height = 16 * scale;
         for (int i = 0; i < content.Rows.Count; i++) height += _rows[i].Height;
         return height;
     }
@@ -84,9 +84,11 @@ internal sealed class NativeUi
             // Keep the source below both the title and its icon, including wrapped names.
             float headerHeight = Math.Max(40 * scale, row.NameHeight);
             row.NoteOffset = headerHeight + 6 * scale;
-            row.EffectOffset = (row.NoteHeight > 0 ? row.NoteOffset + Math.Max(row.NoteHeight, row.SourceIcon.enabled ? 32 * scale : 0) : headerHeight) + 8 * scale;
+            row.EffectOffset = (row.NoteHeight > 0 ? row.NoteOffset + Math.Max(row.NoteHeight, row.SourceIcon.enabled ? 32 * scale : 0) : headerHeight) + 6 * scale;
             row.EffectHeight = string.IsNullOrEmpty(data.Effect) ? 0 : TextHeight(row.Effect, width, units);
-            row.Height = row.EffectOffset + row.EffectHeight + 12 * scale;
+            // The panel owns outer padding. Add a separator only BETWEEN relations;
+            // a single short explanation should not pay for both bottom paddings.
+            row.Height = row.EffectOffset + row.EffectHeight + (i < content.Rows.Count - 1 ? 12 * scale : 0);
             row.Icon.sprite = Sprite(data.Icon); row.Icon.enabled = row.Icon.sprite;
         }
     }
@@ -100,7 +102,7 @@ internal sealed class NativeUi
         float x = box.X + 12 * scale, width = box.W - 32 * scale;
         Prepare(content, width, scale);
         float top = box.Y + 8 * scale;
-        float available = Math.Max(32 * scale, box.Bottom - 12 * scale - top);
+        float available = Math.Max(32 * scale, box.Bottom - 8 * scale - top);
         Position(_rowViewport, new Box(x, top, width, available));
         float totalHeight = 0;
         for (int i = 0; i < content.Rows.Count; i++) totalHeight += _rows[i].Height;

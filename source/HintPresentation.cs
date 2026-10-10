@@ -60,7 +60,7 @@ internal static class HintPresentation
             string name = (choice.IsPerk ? "" : "Усилит ваш перк: ") + info.NameAt(hero.Level(id));
             panel.Rows.Add(new HintRow { Icon = info.IconAt(hero.Level(id)),
                 SourceIcon = parent == null ? null : catalog.Info(parent).IconAt(hero.Level(parent)), Name = name, Note = source,
-                Effect = BonusText.Preview(related, choice.Hints, catalog.Links, hero, choice.IsPerk) });
+                Effect = BonusText.Preview(related, choice.Hints, catalog.Links, hero, choice.IsPerk, compact: true) });
         }
         return panel.Rows.Count > 0 ? panel : null;
     }

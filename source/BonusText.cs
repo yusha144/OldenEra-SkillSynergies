@@ -67,7 +67,7 @@ internal static class BonusText
     }
 
     internal static string Preview(IReadOnlyList<SynergyHint> rowHints, IReadOnlyList<SynergyHint> newHints,
-        IEnumerable<Synergy> allLinks, HeroBuild hero, bool offeredPerk)
+        IEnumerable<Synergy> allLinks, HeroBuild hero, bool offeredPerk, bool compact = false)
     {
         var rendered = new List<Rendered>();
         var visited = new HashSet<string>();
@@ -87,7 +87,7 @@ internal static class BonusText
                     : "с " + Number(before, change.Part) + " до " + Number(before + total, change.Part);
                 rendered.Add(new Rendered { Part = change.Part, Numbers = numbers });
             }
-        return Render(rendered);
+        return Render(rendered, compact);
     }
 
     internal static string Describe(IReadOnlyList<BonusChange> changes)
@@ -97,16 +97,34 @@ internal static class BonusText
 
     private sealed class Rendered { internal BonusPart Part; internal string Numbers; }
 
-    private static string Render(List<Rendered> values)
+    private static string Render(List<Rendered> values, bool compact = false)
     {
         var lines = new List<string>();
+        var merged = new HashSet<Rendered>();
+        if (compact)
+        {
+            // One rule with two sources, not two independent +30% gains. Merge only
+            // matching numbers AND scope; keep rank/territory/different amounts separate.
+            foreach (var ability in values.Where(v => v.Part.Attribute == "Лечение и воскрешение способностями"
+                && v.Part.Subject == "дружественных существ"))
+            {
+                var spell = values.FirstOrDefault(v => !merged.Contains(v)
+                    && v.Part.Attribute == "Лечение и воскрешение заклинаниями" && v.Part.Subject == "героя"
+                    && v.Numbers == ability.Numbers && v.Part.Suffix == ability.Part.Suffix);
+                if (spell == null) continue;
+                lines.Add("Лечение и воскрешение: " + ability.Numbers + ability.Part.Suffix
+                    + ".\nЗаклинания героя и способности союзников.");
+                merged.Add(ability); merged.Add(spell);
+            }
+        }
         // Equal changes to several attributes share one sentence; scopes and coefficients must match.
-        foreach (var group in values.GroupBy(v => v.Numbers + "|" + v.Part.Subject + "|" + v.Part.Suffix))
+        foreach (var group in values.Where(v => !merged.Contains(v)).GroupBy(v => v.Numbers + "|" + v.Part.Subject + "|" + v.Part.Suffix))
         {
             var first = group.First();
             var names = group.Select(v => v.Part.Attribute).Distinct().ToArray();
             string label = string.Join(", ", names);
-            string line = label + (first.Part.Subject.Length == 0 ? "" : " " + first.Part.Subject) + ": " + first.Numbers + first.Part.Suffix + ".";
+            string subject = compact ? first.Part.Subject.Replace("дружественных существ", "союзников") : first.Part.Subject;
+            string line = label + (subject.Length == 0 ? "" : " " + subject) + ": " + first.Numbers + first.Part.Suffix + ".";
             if (!lines.Contains(line)) lines.Add(line);
         }
         return string.Join("\n", lines);

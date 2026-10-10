@@ -143,7 +143,7 @@ foreach (string prefix in new[] { "", "arena_", "campaign_" })
     Check(!string.IsNullOrEmpty(row.SourceIcon) && row.SourceIcon == catalog.Info(prefix + "skill_leadership").IconAt(2)
         && row.Icon == catalog.Info(prefix + "sub_skill_leadership_1").Icon,
         prefix + "Owned perk retains its own icon and gains a separate current-level parent icon, not the offered upgrade or activating skill");
-    Check(row.Effect.Contains("с +1% до +2%") && row.Effect.Contains("за единицу боевого духа") && row.Effect.Contains("дружественных"), prefix + "Resoluteness retains exact before/after, target and per-morale restriction");
+    Check(row.Effect.Contains("с +1% до +2%") && row.Effect.Contains("за единицу боевого духа") && row.Effect.Contains("союзников"), prefix + "Resoluteness retains exact before/after, target and per-morale restriction");
     Check(shown.ChoiceId == formation.Id && shown.Rows.All(r => r.Name != catalog.Info(formation.Id).NameAt(2)), prefix + "Activating offer is distinguished from the owned perk's parent");
     Check(leadership.Hints.Count == 0 && leader.Level(prefix + "skill_leadership") == 2 && !leader.Skills.Contains(formation.Id), prefix + "Preview never acquires either offered skill or substitutes offered level for current level");
     leader.AddSkill(formation.Id, 2);
@@ -185,6 +185,39 @@ foreach (string prefix in new[] { "", "arena_", "campaign_" })
     Check(SynergyRules.ForOffer(catalog.Links, healer, summonerId, false).Count == 0,
         prefix + "Once Summoning is learned its already active healing bonus is not promised again");
 }
+// Local-map screenshot: the same healing increase must not be explained twice.
+var screenshotHero = new HeroBuild(); screenshotHero.AddSkill("skill_summoner", 1);
+var screenshotChoice = new ChoiceHint { Id = "sub_skill_magic_space_2", IsPerk = true, Bounds = new Box(123, 815, 852, 160),
+    Hints = SynergyRules.ForOffer(catalog.Links, screenshotHero, "sub_skill_magic_space_2", true) };
+var screenshotRow = HintPresentation.Build(screenshotChoice, catalog, screenshotHero).Rows.Single();
+Check(screenshotRow.Name == "Основы призыва аватара" && !string.IsNullOrEmpty(screenshotRow.Icon)
+    && screenshotRow.Effect == "Лечение и воскрешение: с +30% до +60% в бою.\nЗаклинания героя и способности союзников.",
+    "Local-map healing hint keeps the source icon and both healing sources but states identical numbers only once");
+var screenshotRows = new[] { new Box(123,637,852,160), screenshotChoice.Bounds, new Box(123,993,852,160) };
+var screenshotBox = PanelLayout.PlaceCards(1644, 1196, 1196f / 1080, screenshotRows, [screenshotChoice.Bounds],
+    (_, _) => 230, screenshotRows).Single();
+Check(screenshotBox.Valid && screenshotBox.Y == screenshotChoice.Bounds.Y && screenshotBox.H == 230
+    && screenshotRows.All(r => !r.Overlaps(screenshotBox)),
+    "The screenshot has enough free adjacent space even for a conservatively tall healing hint, without scrolling");
+
+foreach (bool differentScope in new[] { false, true })
+{
+    // Real structured healing changes, with one amount/scope made different. Such
+    // differences must remain visible, not disappear in the compact paired sentence.
+    var original = catalog.Links.Single(l => l.PerkId == screenshotChoice.Id);
+    var separated = original.Changes.Select(c => new BonusChange { Base = c.Base, Added = c.Added, Comparable = c.Comparable,
+        Part = new BonusPart { Key = c.Part.Key, Attribute = c.Part.Attribute, Subject = c.Part.Subject,
+            Suffix = c.Part.Suffix, Percent = c.Part.Percent, Value = c.Part.Value } }).ToList();
+    var spellChange = separated.Single(c => c.Part.Subject == "героя");
+    if (differentScope) spellChange.Part.Suffix += " на своей территории"; else spellChange.Added = .1m;
+    var link = new Synergy { PerkId = "healing-scope", RequiredSkills = ["skill_summoner"], Changes = separated };
+    var hint = new SynergyHint { Link = link };
+    string text = BonusText.Preview([hint], [hint], [link], screenshotHero, true, compact: true);
+    Check(text.Contains("способностями союзников") && text.Contains("заклинаниями героя")
+        && (differentScope ? text.Contains("на своей территории") : text.Contains("с +30% до +40%")),
+        "Different healing amounts or territories remain separate and explicit");
+}
+
 var ambiguousCatalog = new SynergyCatalog(); ambiguousCatalog.PerkParents["p"] = ["a", "b"];
 var ambiguousHero = new HeroBuild(); ambiguousHero.AddSkill("a", 2); ambiguousHero.AddSkill("b", 1);
 Check(ambiguousCatalog.ParentOf("p", ambiguousHero) == null, "Ambiguous parent is not invented");
@@ -263,9 +296,17 @@ var beyondFrame = PanelLayout.PlaceCards(1280,800,1,[insetCard,extendedButton],[
 Check(beyondFrame.Valid && beyondFrame.Y == insetCard.Y && beyondFrame.X == extendedButton.Right + 12,
     "Native hitbox extending beyond a card shifts the annotation slightly right instead of hiding it");
 var unmatchedBelow = new Box(100,500,700,180);
-var boundedAnnotation = PanelLayout.PlaceCards(1280,800,1,[insetCard,unmatchedBelow],[insetCard],(_,_)=>350,[insetCard,unmatchedBelow])[0];
-Check(boundedAnnotation.Valid && boundedAnnotation.Bottom <= unmatchedBelow.Y - 12,
-    "A long annotation does not spill into an unmatched choice's row and suggest a false association");
+var expandedAnnotation = PanelLayout.PlaceCards(1280,800,1,[insetCard,unmatchedBelow],[insetCard],(_,_)=>350,[insetCard,unmatchedBelow])[0];
+Check(expandedAnnotation.Valid && expandedAnnotation.Y == insetCard.Y && expandedAnnotation.H == 350
+    && !expandedAnnotation.Overlaps(unmatchedBelow),
+    "A single annotation uses empty adjacent space without moving its top away from the activating choice");
+var matchedBelow = PanelLayout.PlaceCards(1280,800,1,[insetCard,unmatchedBelow],[insetCard,unmatchedBelow],(_,_)=>350);
+Check(matchedBelow.All(b => b.Valid) && matchedBelow[0].Bottom <= matchedBelow[1].Y - 12,
+    "A later matching choice still reserves its own space when its neighbour grows");
+var controlBelow = new Box(810, 550, 460, 90);
+var stoppedByControl = PanelLayout.PlaceCards(1280,800,1,[insetCard,controlBelow],[insetCard],(_,_)=>350)[0];
+Check(stoppedByControl.Valid && stoppedByControl.Y == insetCard.Y && stoppedByControl.Bottom <= controlBelow.Y - 4,
+    "Expansion stops before a native control, retaining a usable fallback viewport");
 Check(!PanelLayout.PlaceCards(1280,800,1,[insetCard,new Box(800,280,480,80)],[insetCard],(_,_)=>100)[0].Valid,
     "Blocked card-height space cannot push the explanation lower beside a different native choice");
 
