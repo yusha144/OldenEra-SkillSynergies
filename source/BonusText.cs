@@ -68,6 +68,20 @@ internal static class BonusText
 
     internal static string Preview(IReadOnlyList<SynergyHint> rowHints, IReadOnlyList<SynergyHint> newHints,
         IEnumerable<Synergy> allLinks, HeroBuild hero, bool offeredPerk, bool compact = false)
+        => Render(PreviewValues(rowHints, newHints, allLinks, hero, offeredPerk), compact);
+
+    internal static (string Text, string RichText) NumericPreview(IReadOnlyList<SynergyHint> rowHints,
+        IReadOnlyList<SynergyHint> newHints, IEnumerable<Synergy> allLinks, HeroBuild hero, bool offeredPerk)
+    {
+        // The native perk card already supplies the effect and its restrictions. Repeat
+        // only distinct numeric changes; equal spell/creature healing shares one line.
+        var values = PreviewValues(rowHints, newHints, allLinks, hero, offeredPerk, numbersOnly: true)
+            .GroupBy(v => v.RichNumbers).Select(g => g.First()).ToArray();
+        return (string.Join("\n", values.Select(v => v.Numbers)), string.Join("\n", values.Select(v => v.RichNumbers)));
+    }
+
+    private static List<Rendered> PreviewValues(IReadOnlyList<SynergyHint> rowHints, IReadOnlyList<SynergyHint> newHints,
+        IEnumerable<Synergy> allLinks, HeroBuild hero, bool offeredPerk, bool numbersOnly = false)
     {
         var rendered = new List<Rendered>();
         var visited = new HashSet<string>();
@@ -82,12 +96,20 @@ internal static class BonusText
                         before += link.Changes.Where(c => c.Part.Key == key).Sum(c => c.Added);
                 decimal total = newHints.Where(h => h.Link.PerkId == perk).Sum(h => h.Link.Changes.Where(c => c.Part.Key == key).Sum(c => c.Added));
                 decimal own = rowHints.Where(h => h.Link.PerkId == perk).Sum(h => h.Link.Changes.Where(c => c.Part.Key == key).Sum(c => c.Added));
-                string numbers = !change.Comparable ? "устанавливается на " + Number(change.Part.Value, change.Part) : offeredPerk && own != total
-                    ? "ещё " + Number(own, change.Part) + "; бонус перка " + Number(before + total, change.Part)
-                    : "с " + Number(before, change.Part) + " до " + Number(before + total, change.Part);
-                rendered.Add(new Rendered { Part = change.Part, Numbers = numbers });
+                string Comparison(bool rich)
+                {
+                    string Value(decimal value)
+                    {
+                        string number = Number(value, change.Part), color = NumberColor(change.Part);
+                        return rich && color != null ? "<color=#" + color + ">" + number + "</color>" : number;
+                    }
+                    return !change.Comparable ? (numbersOnly ? "до " : "устанавливается на ") + Value(change.Part.Value)
+                        : offeredPerk && own != total ? "ещё " + Value(own) + (numbersOnly ? "; всего " : "; бонус перка ") + Value(before + total)
+                        : "с " + Value(before) + " до " + Value(before + total);
+                }
+                rendered.Add(new Rendered { Part = change.Part, Numbers = Comparison(false), RichNumbers = Comparison(true) });
             }
-        return Render(rendered, compact);
+        return rendered;
     }
 
     internal static string Describe(IReadOnlyList<BonusChange> changes)
@@ -95,7 +117,21 @@ internal static class BonusText
             ? "с " + Number(c.Base, c.Part) + " до " + Number(c.Base + c.Added, c.Part)
             : "устанавливается на " + Number(c.Part.Value, c.Part) }).ToList());
 
-    private sealed class Rendered { internal BonusPart Part; internal string Numbers; }
+    private sealed class Rendered { internal BonusPart Part; internal string Numbers, RichNumbers; }
+
+    private static string NumberColor(BonusPart part)
+    {
+        // Color follows the structured stat ID, never a translated description or sign.
+        // Key: type | allegiance | receivers | territory | stat [| extra parameters].
+        var key = part.Key.Split('|');
+        string stat = key.Length > 4 ? key[4] : "";
+        if (stat == "override" && key.Length > 5) stat = key[5];
+        return stat switch {
+            "hp" or "finalHealingBonusPercent" => "8FD69A",
+            "gold" or "heroResPercentSet" => "E8C46A",
+            "magicCostSchoolSet" or "magicCostSidSet" or "manaBonusPercent" or "coefBattleStatsForMaxMana" => "86C8EC",
+            _ => null };
+    }
 
     private static string Render(List<Rendered> values, bool compact = false)
     {

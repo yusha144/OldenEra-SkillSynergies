@@ -76,7 +76,8 @@ internal sealed class NativeUi
             var row = _rows[i]; var data = content.Rows[i];
             SetText(row.Name, data.Name, 21 * scale, units);
             SetText(row.Note, data.Note, 16 * scale, units);
-            SetText(row.Effect, data.Effect, 19 * scale, units);
+            // Only the numeric formatter can supply markup; game names/notes stay escaped.
+            SetText(row.Effect, data.EffectRichText ?? data.Effect, 19 * scale, units, data.EffectRichText != null);
             row.NameHeight = TextHeight(row.Name, width - 50 * scale, units);
             row.NoteHeight = string.IsNullOrEmpty(data.Note) ? 0 : TextHeight(row.Note, width - 50 * scale, units);
             row.SourceIcon.sprite = Sprite(data.SourceIcon); row.SourceIcon.enabled = row.SourceIcon.sprite;
@@ -84,11 +85,11 @@ internal sealed class NativeUi
             // Keep the source below both the title and its icon, including wrapped names.
             float headerHeight = Math.Max(40 * scale, row.NameHeight);
             row.NoteOffset = headerHeight + 6 * scale;
-            row.EffectOffset = (row.NoteHeight > 0 ? row.NoteOffset + Math.Max(row.NoteHeight, row.SourceIcon.enabled ? 32 * scale : 0) : headerHeight) + 6 * scale;
-            row.EffectHeight = string.IsNullOrEmpty(data.Effect) ? 0 : TextHeight(row.Effect, width, units);
+            row.EffectOffset = (row.NoteHeight > 0 ? row.NoteOffset + Math.Max(row.NoteHeight, row.SourceIcon.enabled ? 32 * scale : 0) : row.NameHeight) + 4 * scale;
+            row.EffectHeight = string.IsNullOrEmpty(data.Effect) ? 0 : TextHeight(row.Effect, width - 50 * scale, units);
             // The panel owns outer padding. Add a separator only BETWEEN relations;
             // a single short explanation should not pay for both bottom paddings.
-            row.Height = row.EffectOffset + row.EffectHeight + (i < content.Rows.Count - 1 ? 12 * scale : 0);
+            row.Height = Math.Max(40 * scale, row.EffectOffset + row.EffectHeight) + (i < content.Rows.Count - 1 ? 12 * scale : 0);
             row.Icon.sprite = Sprite(data.Icon); row.Icon.enabled = row.Icon.sprite;
         }
     }
@@ -121,7 +122,7 @@ internal sealed class NativeUi
             float noteInset = row.SourceIcon.enabled ? Math.Max(0, (32 * scale - row.NoteHeight) / 2) : 0;
             Position(row.Note.rectTransform, new Box(x + 50 * scale, y + row.NoteOffset + noteInset, width - 50 * scale, row.NoteHeight));
             row.Effect.gameObject.SetActive(row.EffectHeight > 0);
-            Position(row.Effect.rectTransform, new Box(x, y + row.EffectOffset, width, row.EffectHeight));
+            Position(row.Effect.rectTransform, new Box(x + 50 * scale, y + row.EffectOffset, width - 50 * scale, row.EffectHeight));
             Position(row.Rule.rectTransform, new Box(x, y + row.Height - 7 * scale, width, scale));
             row.Rule.gameObject.SetActive(i < content.Rows.Count - 1);
             y += row.Height;
@@ -172,12 +173,13 @@ internal sealed class NativeUi
         return rect;
     }
 
-    private static void SetText(TextMeshProUGUI label, string value, float pixels, float units)
+    private static void SetText(TextMeshProUGUI label, string value, float pixels, float units, bool numericMarkup = false)
     {
         label.fontSize = pixels * units;
         // The native font's default line metrics are very tall; use an explicit compact line height.
         string lineHeight = (pixels * units * 1.25f).ToString("0.##", CultureInfo.InvariantCulture);
-        label.text = "<line-height=" + lineHeight + ">" + (value ?? "").Replace("<", "‹").Replace(">", "›");
+        string text = value ?? "";
+        label.text = "<line-height=" + lineHeight + ">" + (numericMarkup ? text : text.Replace("<", "‹").Replace(">", "›"));
     }
     private static float TextHeight(TextMeshProUGUI label, float width, float units)
         => Math.Max(label.fontSize * 1.3f, label.GetPreferredValues(label.text, width * units, float.PositiveInfinity).y) / units;

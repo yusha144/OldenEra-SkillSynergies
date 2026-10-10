@@ -11,7 +11,7 @@ internal sealed class ChoiceHint
 
 internal sealed class HintRow
 {
-    internal string Icon, SourceIcon, Name, Note, Effect = "";
+    internal string Icon, SourceIcon, Name, Note, Effect = "", EffectRichText;
 }
 
 internal sealed class HintPanel
@@ -58,9 +58,10 @@ internal static class HintPresentation
             if (temporary) source += (source.Length == 0 ? "" : "\n") + "Временный перк";
             var related = choice.Hints.Where(h => choice.IsPerk ? h.Link.RequiredSkills.Contains(id) : h.Link.PerkId == id).ToList();
             string name = (choice.IsPerk ? "" : "Усилит ваш перк: ") + info.NameAt(hero.Level(id));
+            var numbers = BonusText.NumericPreview(related, choice.Hints, catalog.Links, hero, choice.IsPerk);
             panel.Rows.Add(new HintRow { Icon = info.IconAt(hero.Level(id)),
                 SourceIcon = parent == null ? null : catalog.Info(parent).IconAt(hero.Level(parent)), Name = name, Note = source,
-                Effect = BonusText.Preview(related, choice.Hints, catalog.Links, hero, choice.IsPerk, compact: true) });
+                Effect = numbers.Text, EffectRichText = numbers.RichText });
         }
         return panel.Rows.Count > 0 ? panel : null;
     }

@@ -105,7 +105,7 @@ arenaHero.AddSkill("arena_skill_magic_space", 1);
 arina.Hints = SynergyRules.ForOffer(catalog.Links, arenaHero, arina.Id, true);
 Check(HintPresentation.Build(arina, catalog, arenaHero).Rows.Count == 2, "Each currently learned related school is displayed once");
 var arinaTwoSchools = HintPresentation.Build(arina, catalog, arenaHero);
-Check(arinaTwoSchools.Rows.All(r => r.Effect.Contains("ещё +3; бонус перка +12")), "Two schools each contribute +3, with the combined perk bonus +12 shown instead of two misleading +9 totals");
+Check(arinaTwoSchools.Rows.All(r => r.Effect == "ещё +3; всего +12"), "Two schools each contribute +3, with the combined perk bonus +12 shown instead of two misleading +9 totals");
 var existingMage = new HeroBuild(); existingMage.AddSkill("arena_skill_magic_day", 3); existingMage.AddSkill("arena_skill_magic_night", 2);
 existingMage.AddPerk(arina.Id, 2, "arena_skill_magic_day");
 var newSchool = new ChoiceHint { Id = "arena_skill_magic_space", Level = 2, Hints = SynergyRules.ForOffer(catalog.Links, existingMage, "arena_skill_magic_space", false) };
@@ -113,7 +113,9 @@ Check(HintPresentation.Build(newSchool, catalog, existingMage).Rows.Single().Eff
 var nightHero = new HeroBuild(); nightHero.AddSkill("arena_skill_magic_night", 2);
 var cork = new ChoiceHint { Id = "arena_sub_skill_resistance_1", IsPerk = true, Hints = SynergyRules.ForOffer(catalog.Links, nightHero, "arena_sub_skill_resistance_1", true) };
 var corkPanel = HintPresentation.Build(cork, catalog, nightHero);
-Check(corkPanel.Rows.Count == 1 && corkPanel.Rows[0].Effect == "Стоимость заклинаний школы «Ночь» противника: с +20% до +40%.", "Screenshot Cork shows exact enemy mana-cost increase for the learned night school");
+Check(corkPanel.Rows.Count == 1 && corkPanel.Rows[0].Effect == "с +20% до +40%"
+    && corkPanel.Rows[0].EffectRichText == "с <color=#86C8EC>+20%</color> до <color=#86C8EC>+40%</color>",
+    "Cork keeps the exact mana-cost increase, colors only the numbers blue and does not repeat its native description");
 nightHero.AddSkill("arena_skill_magic_day", 1);
 cork.Hints = SynergyRules.ForOffer(catalog.Links, nightHero, cork.Id, true);
 corkPanel = HintPresentation.Build(cork, catalog, nightHero);
@@ -124,7 +126,9 @@ Check(HintPresentation.Build(nightOffer, catalog, corkOwner).Rows.Single().Effec
 var taxChoice = new ChoiceHint { Id = "skill_logistic", IsPerk = false, Hints = SynergyRules.ForOffer(catalog.Links, taxHero, "skill_logistic", false) };
 var taxPanel = HintPresentation.Build(taxChoice, catalog, taxHero);
 Check(taxPanel.Rows.Single().Name == "Усилит ваш перк: Сборщик податей", "Reverse direction explicitly identifies the owned perk improved by this choice");
-Check(taxPanel.Rows.Single().Effect == "Золото: с +250 до +500 в день.", "Owned perk details show the extra benefit absent from the offered main skill description");
+Check(taxPanel.Rows.Single().Effect == "с +250 до +500"
+    && taxPanel.Rows.Single().EffectRichText == "с <color=#E8C46A>+250</color> до <color=#E8C46A>+500</color>",
+    "Income uses coin-colored numbers without repeating the effect description");
 Check(HintPresentation.ForChoices([], catalog, taxHero).Count == 0, "No offered choices means no annotations");
 
 // Screenshot regression: Resoluteness belongs to advanced Leadership, while the offered
@@ -143,7 +147,8 @@ foreach (string prefix in new[] { "", "arena_", "campaign_" })
     Check(!string.IsNullOrEmpty(row.SourceIcon) && row.SourceIcon == catalog.Info(prefix + "skill_leadership").IconAt(2)
         && row.Icon == catalog.Info(prefix + "sub_skill_leadership_1").Icon,
         prefix + "Owned perk retains its own icon and gains a separate current-level parent icon, not the offered upgrade or activating skill");
-    Check(row.Effect.Contains("с +1% до +2%") && row.Effect.Contains("за единицу боевого духа") && row.Effect.Contains("союзников"), prefix + "Resoluteness retains exact before/after, target and per-morale restriction");
+    Check(row.Effect == "с +1% до +2%" && row.EffectRichText == row.Effect,
+        prefix + "Resoluteness shows only its coefficient change in the neutral color; the native card explains morale");
     Check(shown.ChoiceId == formation.Id && shown.Rows.All(r => r.Name != catalog.Info(formation.Id).NameAt(2)), prefix + "Activating offer is distinguished from the owned perk's parent");
     Check(leadership.Hints.Count == 0 && leader.Level(prefix + "skill_leadership") == 2 && !leader.Skills.Contains(formation.Id), prefix + "Preview never acquires either offered skill or substitutes offered level for current level");
     leader.AddSkill(formation.Id, 2);
@@ -191,8 +196,9 @@ var screenshotChoice = new ChoiceHint { Id = "sub_skill_magic_space_2", IsPerk =
     Hints = SynergyRules.ForOffer(catalog.Links, screenshotHero, "sub_skill_magic_space_2", true) };
 var screenshotRow = HintPresentation.Build(screenshotChoice, catalog, screenshotHero).Rows.Single();
 Check(screenshotRow.Name == "Основы призыва аватара" && !string.IsNullOrEmpty(screenshotRow.Icon)
-    && screenshotRow.Effect == "Лечение и воскрешение: с +30% до +60% в бою.\nЗаклинания героя и способности союзников.",
-    "Local-map healing hint keeps the source icon and both healing sources but states identical numbers only once");
+    && screenshotRow.Effect == "с +30% до +60%"
+    && screenshotRow.EffectRichText == "с <color=#8FD69A>+30%</color> до <color=#8FD69A>+60%</color>",
+    "Local-map healing hint keeps the source name/icon and a single green numeric comparison without the duplicated description");
 var screenshotRows = new[] { new Box(123,637,852,160), screenshotChoice.Bounds, new Box(123,993,852,160) };
 var screenshotBox = PanelLayout.PlaceCards(1644, 1196, 1196f / 1080, screenshotRows, [screenshotChoice.Bounds],
     (_, _) => 230, screenshotRows).Single();
@@ -215,7 +221,11 @@ foreach (bool differentScope in new[] { false, true })
     string text = BonusText.Preview([hint], [hint], [link], screenshotHero, true, compact: true);
     Check(text.Contains("способностями союзников") && text.Contains("заклинаниями героя")
         && (differentScope ? text.Contains("на своей территории") : text.Contains("с +30% до +40%")),
-        "Different healing amounts or territories remain separate and explicit");
+        "Detailed calculations retain different healing amounts and territories");
+    var numeric = BonusText.NumericPreview([hint], [hint], [link], screenshotHero, true);
+    Check(numeric.Text.Split('\n').Length == (differentScope ? 1 : 2)
+        && numeric.Text.Contains("с +30% до +60%") && (differentScope || numeric.Text.Contains("с +30% до +40%")),
+        "The numeric UI omits repeated scope prose, merges equal values and preserves distinct values");
 }
 
 var ambiguousCatalog = new SynergyCatalog(); ambiguousCatalog.PerkParents["p"] = ["a", "b"];
