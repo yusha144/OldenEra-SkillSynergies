@@ -264,10 +264,46 @@ Check(boundedAnnotation.Valid && boundedAnnotation.Bottom <= unmatchedBelow.Y - 
 Check(!PanelLayout.PlaceCards(1280,800,1,[insetCard,new Box(800,280,480,80)],[insetCard],(_,_)=>100)[0].Valid,
     "Blocked card-height space cannot push the explanation lower beside a different native choice");
 
-var rowPages = RowPagination.Split([70, 70, 70], 150);
-Check(rowPages.Count == 2 && rowPages[0].Start == 0 && rowPages[0].Count == 2 && rowPages[1].Start == 2 && rowPages[1].Count == 1, "Names and explanations stay together when paging");
-Check(RowPagination.Split([], 150).Single().Count == 0, "Empty result has a valid empty page");
-Check(RowPagination.Split([70.125f, 70.125f], 140.2499f).Count == 1, "Fractional screen scaling cannot create a spurious extra page in a measured panel");
+// Large text is contained in each card's own scrolling viewport. It is never
+// squeezed to fit, even when all three short perk cards have lengthy bonuses.
+foreach (var size in new[] { (1634f,1205f), (1920f,1080f), (2560f,1440f), (1280f,720f) })
+{
+    float scale = Math.Clamp(size.Item2 / 1080, .75f, 2f);
+    var cards = new[] { .54f, .69f, .84f }.Select(y => new Box(size.Item1 * .085f, size.Item2 * y, size.Item1 * .51f, size.Item2 * .13f)).ToArray();
+    var heights = new[] { 360 * scale, 640 * scale, 290 * scale };
+    var boxes = PanelLayout.PlaceCards(size.Item1, size.Item2, scale, cards, cards, (i, _) => heights[i]);
+    Check(boxes.All(b => b.Valid) && boxes.Select(b => b.Y).SequenceEqual(cards.Select(c => c.Y)),
+        "Three long annotations stay visible at their own short perk cards, including screenshot aspect ratio");
+    Check(boxes.Select((box, i) => boxes.Where((_, j) => j != i).All(other => !box.Overlaps(other))
+        && cards.All(card => !box.Overlaps(card)) && box.Bottom <= size.Item2 - 8 * scale).All(ok => ok),
+        "Large-text panels cannot overlap each other, native choices or the screen edge");
+    var scrolls = boxes.Select((box, i) => { var state = new HintScroll(); state.SetRange(heights[i] - 20 * scale, box.H - 20 * scale); return state; }).ToArray();
+    Check(scrolls.All(s => s.Overflow && s.ViewHeight >= 64 * scale), "Long explanations get usable individual scroll areas instead of smaller fonts");
+    scrolls[1].Wheel(-100, scale);
+    Check(scrolls[0].Offset == 0 && scrolls[2].Offset == 0 && Math.Abs(scrolls[1].ContentHeight - scrolls[1].Offset - scrolls[1].ViewHeight) < .25f,
+        "Scrolling the middle annotation reaches its final line without moving its neighbors");
+}
+var scroll = new HintScroll();
+var scrollTrack = new Box(600, 200, 3, 150);
+scroll.SetRange(140, 150); scroll.Wheel(-100, 1);
+Check(!scroll.Overflow && scroll.Offset == 0 && !scroll.Thumb(scrollTrack, 1).Valid, "Short text has no scrollbar or hidden scroll position");
+scroll.SetRange(280, 150);
+var topThumb = scroll.Thumb(scrollTrack, 1);
+Check(topThumb.Valid && topThumb.Y == scrollTrack.Y && topThumb.Bottom < scrollTrack.Bottom, "Scrollbar indicates overflow even for a single long explanation");
+scroll.Wheel(-1, 1); float preservedOffset = scroll.Offset;
+scroll.SetRange(280, 150);
+Check(scroll.Offset == preservedOffset && scroll.Offset > 0, "Routine refresh retains the current scroll position");
+scroll.Wheel(-100, 1);
+Check(scroll.Offset == 130 && scroll.Thumb(scrollTrack, 1).Bottom == scrollTrack.Bottom, "Scrolling to the end reveals all text and stops at the lower bound");
+scroll.Wheel(100, 1);
+Check(scroll.Offset == 0, "Scrolling up stops at the title, never above the content");
+scroll.Wheel(-100, 1); scroll.SetRange(280, 220);
+Check(scroll.Offset == 60, "Resizing clamps the previous offset to the new viewport");
+scroll.SetRange(140, 150);
+Check(scroll.Offset == 0 && !scroll.Overflow, "A now-fitting annotation clears its old scroll offset");
+scroll.SetRange(140.25f, 140.2499f);
+Check(!scroll.Overflow, "Fractional measurement differences do not create a spurious scrollbar");
+Check(new HintScroll().Offset == 0, "A new choice starts at the beginning of its explanation");
 
 // Verify the catalog rejects unknown conditions instead of dropping them.
 string temporary = Path.Combine(Path.GetTempPath(), "synergy-test-" + Guid.NewGuid() + ".zip");

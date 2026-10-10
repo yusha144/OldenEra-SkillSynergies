@@ -19,7 +19,7 @@ public sealed class SynergyOverlay : MonoBehaviour
     {
         internal NativeUi Ui;
         internal Box Bounds;
-        internal int Page = 1;
+        internal readonly HintScroll Scroll = new();
     }
     private readonly Dictionary<string, ChoiceView> _panels = new();
     private readonly Il2CppSystem.Collections.Generic.List<BhLevelUpSkillView> _skills = new();
@@ -55,7 +55,7 @@ public sealed class SynergyOverlay : MonoBehaviour
                 foreach (var panel in _panels.Values)
                     if (panel.Bounds.Valid && panel.Bounds.Contains(mouse.x, mouse.y))
                     {
-                        panel.Page += Input.mouseScrollDelta.y > 0 ? -1 : 1;
+                        panel.Scroll.Wheel(Input.mouseScrollDelta.y, Math.Clamp(Screen.height / 1080f, 0.75f, 2f));
                         _nextRefresh = 0;
                         break;
                     }
@@ -226,7 +226,7 @@ public sealed class SynergyOverlay : MonoBehaviour
         {
             var panel = _panels[contents[i].ChoiceId]; panel.Bounds = boxes[i];
             panel.Ui.Show(boxes[i].Valid);
-            if (boxes[i].Valid) panel.Ui.Panel(boxes[i], scale, contents[i], ref panel.Page);
+            if (boxes[i].Valid) panel.Ui.Panel(boxes[i], scale, contents[i], panel.Scroll);
         }
         if (boxes.Any(box => !box.Valid) && Time.unscaledTime >= _nextLayoutLog)
         {

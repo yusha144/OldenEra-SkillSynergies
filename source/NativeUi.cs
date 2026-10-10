@@ -11,7 +11,7 @@ internal sealed class NativeUi
 {
     internal readonly RectTransform Root;
     internal readonly Image Frame;
-    private readonly TextMeshProUGUI _footer;
+    private readonly Image _scrollTrack, _scrollThumb;
     private readonly RectTransform _panel;
     private readonly RectTransform _rowViewport;
     private readonly TMP_FontAsset _font;
@@ -39,9 +39,12 @@ internal sealed class NativeUi
         Frame = _panel.gameObject.AddComponent<Image>(); Frame.color = new Color(0.045f, 0.07f, 0.11f, 1); Frame.raycastTarget = false;
         var outline = Inset("BrassOutline", _panel, 1, new Color(0.54f, 0.48f, 0.33f, 1));
         Inset("BlueSlate", outline, 1, new Color(0.14f, 0.18f, 0.25f, 1));
-        _footer = CreateText("Navigation", _panel); _footer.color = new Color(0.66f, 0.68f, 0.73f);
         _rowViewport = CreateRect("RelationsViewport", _panel);
         _rowViewport.gameObject.AddComponent<RectMask2D>();
+        _scrollTrack = CreateRect("ScrollTrack", _panel).gameObject.AddComponent<Image>();
+        _scrollTrack.color = new Color(0.54f, 0.48f, 0.33f, 0.25f); _scrollTrack.raycastTarget = false;
+        _scrollThumb = CreateRect("ScrollThumb", _panel).gameObject.AddComponent<Image>();
+        _scrollThumb.color = new Color(0.82f, 0.67f, 0.37f, 0.9f); _scrollThumb.raycastTarget = false;
         _panel.gameObject.SetActive(false);
     }
 
@@ -58,7 +61,7 @@ internal sealed class NativeUi
         // Initialize native TMP components before measuring new rows; final visibility is
         // assigned by the layout pass before Unity renders the frame.
         _panel.gameObject.SetActive(true);
-        Prepare(content, width - 24 * scale, scale);
+        Prepare(content, width - 32 * scale, scale);
         float height = 20 * scale;
         for (int i = 0; i < content.Rows.Count; i++) height += _rows[i].Height;
         return height;
@@ -71,73 +74,56 @@ internal sealed class NativeUi
         {
             if (i == _rows.Count) _rows.Add(CreateRow());
             var row = _rows[i]; var data = content.Rows[i];
-            SetText(row.Name, data.Name, 16 * scale, units);
-            SetText(row.Note, data.Note, 12 * scale, units);
-            SetText(row.Effect, data.Effect, 14 * scale, units);
-            row.NameHeight = TextHeight(row.Name, width - 42 * scale, units);
-            row.NoteHeight = string.IsNullOrEmpty(data.Note) ? 0 : TextHeight(row.Note, width - 42 * scale, units);
-            row.EffectOffset = Math.Max(32 * scale, row.NameHeight + (row.NoteHeight > 0 ? row.NoteHeight + 4 * scale : 0)) + 8 * scale;
+            SetText(row.Name, data.Name, 21 * scale, units);
+            SetText(row.Note, data.Note, 16 * scale, units);
+            SetText(row.Effect, data.Effect, 19 * scale, units);
+            row.NameHeight = TextHeight(row.Name, width - 50 * scale, units);
+            row.NoteHeight = string.IsNullOrEmpty(data.Note) ? 0 : TextHeight(row.Note, width - 50 * scale, units);
+            row.EffectOffset = Math.Max(40 * scale, row.NameHeight + (row.NoteHeight > 0 ? row.NoteHeight + 4 * scale : 0)) + 8 * scale;
             row.EffectHeight = string.IsNullOrEmpty(data.Effect) ? 0 : TextHeight(row.Effect, width, units);
             row.Height = row.EffectOffset + row.EffectHeight + 12 * scale;
             row.Icon.sprite = Sprite(data.Icon); row.Icon.enabled = row.Icon.sprite;
         }
     }
 
-    internal void Panel(Box box, float scale, HintPanel content, ref int page)
+    internal void Panel(Box box, float scale, HintPanel content, HintScroll scroll)
     {
         _panel.gameObject.SetActive(box.Valid);
         if (!box.Valid) return;
         Position(_panel, box);
-        float units = UnitsPerPixel(Root);
-        float x = box.X + 12 * scale, width = box.W - 24 * scale;
+        // Reserve a narrow gutter so showing a scrollbar never reflows the text.
+        float x = box.X + 12 * scale, width = box.W - 32 * scale;
         Prepare(content, width, scale);
         float top = box.Y + 8 * scale;
         float available = Math.Max(32 * scale, box.Bottom - 12 * scale - top);
-        var fullHeights = new List<float>();
-        for (int i = 0; i < content.Rows.Count; i++) fullHeights.Add(_rows[i].Height);
-        if (RowPagination.Split(fullHeights, available).Count > 1) available -= 22 * scale;
         Position(_rowViewport, new Box(x, top, width, available));
-        var heights = new List<float>();
-        for (int i = 0; i < content.Rows.Count; i++)
-        {
-            var row = _rows[i]; var data = content.Rows[i];
-            row.Root.gameObject.SetActive(false);
-            // Keep unusually long labels in one item instead of splitting a relation across pages.
-            if (row.Height > available)
-            {
-                float fit = Math.Clamp((available - 24 * scale) / (row.NameHeight + row.NoteHeight + row.EffectHeight), 0.5f, 1f);
-                SetText(row.Name, data.Name, 16 * scale * fit, units);
-                SetText(row.Note, data.Note, 12 * scale * fit, units);
-                SetText(row.Effect, data.Effect, 14 * scale * fit, units);
-                row.NameHeight = TextHeight(row.Name, width - 42 * scale, units);
-                row.NoteHeight = string.IsNullOrEmpty(data.Note) ? 0 : TextHeight(row.Note, width - 42 * scale, units);
-                row.EffectOffset = Math.Max(32 * scale, row.NameHeight + (row.NoteHeight > 0 ? row.NoteHeight + 4 * scale : 0)) + 8 * scale;
-                row.EffectHeight = string.IsNullOrEmpty(data.Effect) ? 0 : TextHeight(row.Effect, width, units);
-                row.Height = row.EffectOffset + row.EffectHeight + 12 * scale;
-            }
-            heights.Add(row.Height);
-        }
+        float totalHeight = 0;
+        for (int i = 0; i < content.Rows.Count; i++) totalHeight += _rows[i].Height;
+        scroll.SetRange(totalHeight, available);
         for (int i = content.Rows.Count; i < _rows.Count; i++) _rows[i].Root.gameObject.SetActive(false);
-        var pages = RowPagination.Split(heights, available);
-        page = Math.Clamp(page, 1, pages.Count);
-        var shown = pages[page - 1]; float y = top;
-        for (int i = shown.Start; i < shown.Start + shown.Count; i++)
+        float y = top - scroll.Offset;
+        for (int i = 0; i < content.Rows.Count; i++)
         {
             var row = _rows[i]; row.Root.gameObject.SetActive(true);
             Position(row.Root, new Box(x, y, width, row.Height));
-            Position(row.Icon.rectTransform, new Box(x, y, 32 * scale, 32 * scale));
-            Position(row.Name.rectTransform, new Box(x + 42 * scale, y, width - 42 * scale, row.NameHeight));
+            Position(row.Icon.rectTransform, new Box(x, y, 40 * scale, 40 * scale));
+            Position(row.Name.rectTransform, new Box(x + 50 * scale, y, width - 50 * scale, row.NameHeight));
             row.Note.gameObject.SetActive(row.NoteHeight > 0);
-            Position(row.Note.rectTransform, new Box(x + 42 * scale, y + row.NameHeight + 4 * scale, width - 42 * scale, row.NoteHeight));
+            Position(row.Note.rectTransform, new Box(x + 50 * scale, y + row.NameHeight + 4 * scale, width - 50 * scale, row.NoteHeight));
             row.Effect.gameObject.SetActive(row.EffectHeight > 0);
             Position(row.Effect.rectTransform, new Box(x, y + row.EffectOffset, width, row.EffectHeight));
             Position(row.Rule.rectTransform, new Box(x, y + row.Height - 7 * scale, width, scale));
-            row.Rule.gameObject.SetActive(i < shown.Start + shown.Count - 1);
+            row.Rule.gameObject.SetActive(i < content.Rows.Count - 1);
             y += row.Height;
         }
-        Position(_footer.rectTransform, new Box(x, box.Bottom - 23 * scale, width, 16 * scale));
-        _footer.gameObject.SetActive(pages.Count > 1);
-        SetText(_footer, pages.Count > 1 ? $"{page}/{pages.Count} · колёсико над панелью" : "", 10 * scale, units);
+        _scrollTrack.gameObject.SetActive(scroll.Overflow);
+        _scrollThumb.gameObject.SetActive(scroll.Overflow);
+        if (scroll.Overflow)
+        {
+            var track = new Box(box.Right - 9 * scale, top, 3 * scale, available);
+            Position(_scrollTrack.rectTransform, track);
+            Position(_scrollThumb.rectTransform, scroll.Thumb(track, scale));
+        }
     }
 
     internal void Mark(Box card, float scale)

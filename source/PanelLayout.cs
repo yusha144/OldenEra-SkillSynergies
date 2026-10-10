@@ -34,7 +34,7 @@ internal static class PanelLayout
             if (bottom - top < 96 * scale) continue;
             Box best = default; float bestScore = float.PositiveInfinity;
             var measurements = new Dictionary<float, float>();
-            foreach (float rawWidth in new[] { 340f, 420f, 300f, 260f })
+            foreach (float rawWidth in new[] { 420f, 500f, 340f, 300f, 260f })
                 foreach (bool right in new[] { true, false })
                 {
                     // Native button hitboxes and window ornaments can extend past a card.
@@ -58,7 +58,7 @@ internal static class PanelLayout
                         if (obstacles.Any(o => o.Expand(4 * scale).Overlaps(candidate)) || occupied.Any(o => o.Expand(6 * scale).Overlaps(candidate))) continue;
                         float distance = right ? Math.Abs(x - anchor.Right) : Math.Abs(candidate.Right - anchor.X);
                         float score = distance + 10 * (desired - h)
-                            + .1f * Math.Abs(w - 340 * scale) + (right ? 0 : scale);
+                            + .1f * Math.Abs(w - 420 * scale) + (right ? 0 : scale);
                         if (score < bestScore) { best = candidate; bestScore = score; }
                     }
                 }

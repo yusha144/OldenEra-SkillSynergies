@@ -64,26 +64,3 @@ internal static class HintPresentation
         return panel.Rows.Count > 0 ? panel : null;
     }
 }
-
-internal readonly struct RowPage
-{
-    internal readonly int Start, Count;
-    internal RowPage(int start, int count) { Start = start; Count = count; }
-}
-
-internal static class RowPagination
-{
-    internal static List<RowPage> Split(IReadOnlyList<float> heights, float available)
-    {
-        var pages = new List<RowPage>();
-        int start = 0; float used = 0;
-        for (int i = 0; i < heights.Count; i++)
-        {
-            if (i > start && used + heights[i] > available + 0.25f)
-            { pages.Add(new RowPage(start, i - start)); start = i; used = 0; }
-            used += heights[i];
-        }
-        pages.Add(new RowPage(start, heights.Count - start));
-        return pages;
-    }
-}
