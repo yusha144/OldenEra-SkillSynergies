@@ -4,6 +4,15 @@ using System.IO.Compression;
 
 int checks = 0;
 void Check(bool ok, string name) { if (!ok) throw new Exception(name); checks++; }
+// Window lookup regression: the legacy singleton is null in this game build.
+// Registry entries may include unopened windows or destroyed/stale cached objects.
+bool Visible(string window) => window == "standard-open" || window == "arena-open";
+Check(WindowLookup.Find<string>(null, ["closed", "standard-open"], Visible) == "standard-open", "Standard selection works without the legacy singleton");
+Check(WindowLookup.Find<string>(null, ["closed", "arena-open"], Visible) == "arena-open", "Arena selection works without the legacy singleton");
+Check(WindowLookup.Find<string>("closed", ["arena-open"], Visible) == "arena-open", "A stale cached window cannot hide a newly opened selection");
+Check(WindowLookup.Find<string>("standard-open", ["closed"], Visible) == "standard-open", "Active cached selection stays attached");
+Check(WindowLookup.Find<string>(null, [null, "closed"], Visible) == null, "Closed windows and null entries cannot display hints");
+Check(WindowLookup.Find<string>("closed", [], Visible) == null, "Closing a selection stops display even if a reference remains");
 var economy = new Synergy { PerkId = "tax", RequiredSkills = ["logistics"], Effect = "+250" };
 var magic = new Synergy { PerkId = "magic", RequiredSkills = ["night", "day"], Effect = "+3" };
 Synergy[] links = [economy, magic];
@@ -45,6 +54,11 @@ foreach (var size in new[] { (1920f,1080f), (2560f,1440f), (1280f,720f) })
     Check(!panel.Overlaps(obstacles[0]) && panel.X >= 0 && panel.Y >= 0 && panel.Right <= size.Item1 && panel.Bottom <= size.Item2, "Panel avoids choices and remains on screen");
 }
 Check(!PanelLayout.Place(1280, 720, 1, [new Box(0,0,1280,720)]).Valid, "No free space must hide details rather than cover choices");
+var crowded = new[] { new Box(0, 64, 1280, 656) };
+Check(!PanelLayout.Place(1280, 720, 1, crowded).Valid, "Crowded screen cannot fit full details");
+var status = PanelLayout.Status(1280, 720, 1, crowded);
+Check(status.Valid && !status.Overlaps(crowded[0]), "Compact status remains visible without covering the crowded selector");
+Check(!PanelLayout.Status(1280, 720, 1, [new Box(0,0,1280,720)]).Valid, "Status never covers a completely occupied screen");
 
 // Integration with installed read-only game data; no game methods or saves are accessed.
 string core = args.Length > 0 ? args[0] : @"E:\Steam_M2\steamapps\common\Heroes of Might and Magic Olden Era\HeroesOldenEra_Data\StreamingAssets\Core.zip";

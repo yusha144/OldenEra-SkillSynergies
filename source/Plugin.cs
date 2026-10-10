@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 
 namespace OldenEra.SkillSynergies;
 
-[BepInPlugin("local.oldenera.skillsynergies", "Olden Era Skill Synergies", "0.1.0")]
+[BepInPlugin("local.oldenera.skillsynergies", "Olden Era Skill Synergies", "0.1.1")]
 public sealed class Plugin : BasePlugin
 {
     internal static Plugin Instance;
@@ -14,7 +14,7 @@ public sealed class Plugin : BasePlugin
     public override void Load()
     {
         Instance = this;
-        Enabled = Config.Bind("Display", "Enabled", true, "Show skill combination hints in the level-up window. F9 toggles this mod.");
+        Enabled = Config.Bind("Display", "Enabled", true, "Initial visibility of skill hints. F9 toggles hints for this session, only while the skill selection window is open.");
         try
         {
             if (!Matches("GameAssembly.dll", "D9972B0E7F7DD1C17758808E2F1B80E0A728946416D9A41DEAA99BAD744DE53A")
@@ -22,7 +22,7 @@ public sealed class Plugin : BasePlugin
             { Log.LogWarning("Skill Synergies disabled: unsupported game build (expected Steam 25672315)."); return; }
             Catalog.Load(Path.Combine(Paths.GameRootPath, "HeroesOldenEra_Data", "StreamingAssets", "Core.zip"));
             AddComponent<SynergyOverlay>();
-            Log.LogInfo($"Skill Synergies 0.1.0 loaded: {Catalog.Links.Count} direct combinations, {Catalog.SkippedConditions} unsupported condition groups skipped. F9 toggles hints.");
+            Log.LogInfo($"Skill Synergies 0.1.1 loaded: {Catalog.Links.Count} direct combinations, {Catalog.SkippedConditions} unsupported condition groups skipped. Initial visibility={Enabled.Value}. F9 toggles hints inside skill selection, for this session only.");
         }
         catch (Exception error) { Log.LogError($"Skill Synergies could not start: {error}"); }
     }

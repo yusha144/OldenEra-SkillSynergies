@@ -1,4 +1,5 @@
 using Hex.Session.UI;
+using Il2CppInterop.Runtime.Attributes;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -9,11 +10,13 @@ public sealed class SynergyOverlay : MonoBehaviour
 {
     public SynergyOverlay(IntPtr pointer) : base(pointer) { }
     private NativeUi _ui;
+    private BhLevelUpView _window;
     private IntPtr _owner;
-    private float _nextRefresh, _nextError, _nextLayoutLog;
+    private float _nextRefresh, _nextError, _nextLayoutLog, _nextDiagnostic;
+    private bool _started, _visible;
     private int _page = 1;
     private Box _panelBox;
-    private string _hoverId = "", _lastContext = "";
+    private string _hoverId = "", _lastContext = "", _lastDiagnostic = "";
     private readonly Il2CppSystem.Collections.Generic.List<BhLevelUpSkillView> _skills = new();
     private readonly Il2CppSystem.Collections.Generic.List<BhLevelUpSubSkillView> _perks = new();
     private readonly Il2CppSystem.Collections.Generic.List<Button> _buttons = new();
@@ -31,11 +34,22 @@ public sealed class SynergyOverlay : MonoBehaviour
     {
         try
         {
-            if (Input.GetKeyDown(KeyCode.F9)) Plugin.Instance.Enabled.Value = !Plugin.Instance.Enabled.Value;
-            var window = BhLevelUpView.cild;
-            if (!Plugin.Instance.Enabled.Value || !window || !window.gameObject.activeInHierarchy || !window.cszv
-                || !window.canvas || !window.canvas.isActiveAndEnabled || (window.cg && window.cg.alpha <= 0.01f))
-            { _ui?.Show(false); _hoverId = ""; _nextRefresh = 0; return; }
+            if (!_started)
+            {
+                _started = true; _visible = Plugin.Instance.Enabled.Value;
+                Plugin.Instance.Log.LogInfo("Skill hint updater running; watching the registered level-up windows (standard and arena).");
+            }
+            if (_window && !IsVisible(_window))
+            {
+                _ui?.Show(false); _window = null; _hoverId = ""; _lastContext = ""; _panelBox = default;
+                _nextRefresh = 0;
+            }
+            // Do not silently persist an accidental F9 press made elsewhere in the game.
+            if (_window && Input.GetKeyDown(KeyCode.F9))
+            {
+                _visible = !_visible; _nextRefresh = 0;
+                Plugin.Instance.Log.LogInfo($"Skill hints {(_visible ? "shown" : "hidden")} for this session (F9).");
+            }
             var mouse = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
             if (_panelBox.Contains(mouse.x, mouse.y) && Input.mouseScrollDelta.y != 0)
             {
@@ -44,30 +58,69 @@ public sealed class SynergyOverlay : MonoBehaviour
             }
             if (Time.unscaledTime < _nextRefresh) return;
             _nextRefresh = Time.unscaledTime + 0.12f;
-            Refresh(window);
+            _window = WindowLookup.Find<BhLevelUpView>(_window, RegisteredWindows(), IsVisible);
+            if (!_window) { _ui?.Show(false); return; }
+            Refresh(_window);
         }
         catch (Exception error)
         {
             _ui?.Show(false);
             if (Time.unscaledTime >= _nextError)
             {
-                Plugin.Instance.Log.LogWarning($"Synergy UI paused: {error.GetType().Name}: {error.Message}");
+                Plugin.Instance.Log.LogWarning($"Synergy UI paused: {error}");
                 _nextError = Time.unscaledTime + 15;
             }
         }
     }
 
+    [HideFromIl2Cpp]
+    private static bool IsVisible(BhLevelUpView window) => window && window.gameObject.activeInHierarchy && window.cszv
+        && window.canvas && window.canvas.isActiveAndEnabled && (!window.cg || window.cg.alpha > 0.01f);
+
+    [HideFromIl2Cpp]
+    private static IEnumerable<BhLevelUpView> RegisteredWindows()
+    {
+        // BhLevelUpView.cild is never assigned by the current game binary. Both game modes
+        // open a registered BhLevelUpView via cpo instead. Reading the registry does not create UI.
+        var manager = cpo.ccog;
+        if (manager == null) yield break;
+        if (manager.ccoh != null)
+            foreach (var pair in manager.ccoh)
+            {
+                var window = pair.Value?.TryCast<BhLevelUpView>();
+                if (window) yield return window;
+            }
+        if (manager.ccoi != null)
+            foreach (var screen in manager.ccoi)
+            {
+                var window = screen?.TryCast<BhLevelUpView>();
+                if (window) yield return window;
+            }
+    }
+
+    [HideFromIl2Cpp]
+    private void Diagnostic(string message)
+    {
+        if (_lastDiagnostic == message && Time.unscaledTime < _nextDiagnostic) return;
+        _lastDiagnostic = message; _nextDiagnostic = Time.unscaledTime + 30;
+        Plugin.Instance.Log.LogInfo(message);
+    }
+
+    [HideFromIl2Cpp]
     private void Refresh(BhLevelUpView window)
     {
-        var data = window.cilf?.chna;
-        if (data?.skills?.list == null) { _ui?.Show(false); return; }
+        var data = (window.cile?.chpd ?? window.cilf)?.chna;
+        if (data?.skills?.list == null)
+        { _ui?.Show(false); Diagnostic("Registered level-up window is open; waiting for hero skill data."); return; }
         var sample = window.currentLevel;
-        if (!sample || !sample.font) { _ui?.Show(false); return; }
+        if (!sample || !sample.font)
+        { _ui?.Show(false); Diagnostic("Registered level-up window is open; native font is not ready."); return; }
         if (_ui == null || !_ui.Root || _owner != window.Pointer)
         {
             _ui?.Destroy();
             _ui = new NativeUi(window.transform.Cast<RectTransform>(), sample);
             _owner = window.Pointer; _hoverId = "";
+            Diagnostic($"Attached skill hints to registered level-up window; arena={window.cilk}, legacy singleton present={(bool)BhLevelUpView.cild}.");
         }
         _ui.Show(true);
         var hero = new HeroBuild();
@@ -103,12 +156,14 @@ public sealed class SynergyOverlay : MonoBehaviour
         if (window.heroPortraitView) ReadObstacle(window.heroPortraitView.transform);
         if (window.heroDataView) ReadObstacle(window.heroDataView.transform);
         ReadObstacle(window.currentLevel.transform);
-        if (_offers.Count == 0) { _ui.Show(false); _hoverId = ""; return; }
-        string context = data.id + ":" + string.Join(",", _offers.Select(o => o.Id));
+        if (_offers.Count == 0)
+            Diagnostic($"Waiting for offered cards: skill views={_skills.Count}, perk views={_perks.Count}, arena={window.cilk}.");
+        string context = data.id + ":" + string.Join(",", _offers.Select(o => o.Id))
+            + ":" + string.Join(",", hero.Skills.OrderBy(id => id)) + ":" + string.Join(",", hero.Perks.OrderBy(id => id));
         if (context != _lastContext)
         {
             _hoverId = ""; _page = 1; _lastContext = context;
-            Plugin.Instance.Log.LogInfo($"Level-up hints: hero {data.id}, learned perks={hero.Perks.Count}, offers={_offers.Count}, related offers={_offers.Count(o => o.Hints.Count > 0)}.");
+            Plugin.Instance.Log.LogInfo($"Level-up hints: hero {data.id}, arena={window.cilk}, learned perks={hero.Perks.Count}, offers={_offers.Count}, related offers={_offers.Count(o => o.Hints.Count > 0)}, visible={_visible}.");
         }
         float scale = Math.Clamp(Screen.height / 1080f, 0.75f, 2f);
         var mouse = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
@@ -118,7 +173,7 @@ public sealed class SynergyOverlay : MonoBehaviour
         else if (!_panelBox.Contains(mouse.x, mouse.y)) _hoverId = "";
         Offer selected = _offers.FirstOrDefault(offer => offer.Id == _hoverId);
         _ui.Begin();
-        foreach (var offer in _offers.Where(o => o.Hints.Count > 0))
+        foreach (var offer in _offers.Where(o => _visible && o.Hints.Count > 0))
         {
             var ids = new List<string>();
             foreach (var hint in offer.Hints)
@@ -138,22 +193,36 @@ public sealed class SynergyOverlay : MonoBehaviour
             if (strip.Contains(mouse.x, mouse.y)) { _hoverId = offer.Id; selected = offer; }
         }
         _ui.End();
+        if (!_visible)
+        {
+            _panelBox = PanelLayout.Status(Screen.width, Screen.height, scale, _obstacles);
+            _ui.Status(_panelBox, scale, "Сочетания скрыты · F9 показать");
+            return;
+        }
         _panelBox = PanelLayout.Place(Screen.width, Screen.height, scale, _obstacles);
         if (!_panelBox.Valid && Time.unscaledTime >= _nextLayoutLog)
         {
             Plugin.Instance.Log.LogWarning("No unobstructed space for synergy details; related-skill badges remain visible.");
             _nextLayoutLog = Time.unscaledTime + 30;
         }
+        if (!_panelBox.Valid)
+        {
+            _panelBox = PanelLayout.Status(Screen.width, Screen.height, scale, _obstacles);
+            _ui.Status(_panelBox, scale, "Сочетания: нет места для панели");
+            return;
+        }
         string heading = selected == null ? "ПОЛЕЗНО ИЗУЧИТЬ" : "СОЧЕТАНИЯ";
-        string body = selected == null ? Overview(hero) : Details(selected);
+        string body = _offers.Count == 0 ? "Мод подключён. Ожидаю варианты навыков или перков…" : selected == null ? Overview(hero) : Details(selected);
         _ui.Panel(_panelBox, scale, heading, body, ref _page);
     }
 
+    [HideFromIl2Cpp]
     private void AddOffer(string id, bool perk, Box bounds, HeroBuild hero)
     {
         if (string.IsNullOrEmpty(id) || _offers.Any(o => o.Id == id)) return;
         _offers.Add(new Offer { Id = id, IsPerk = perk, Bounds = bounds, Hints = SynergyRules.ForOffer(Plugin.Instance.Catalog.Links, hero, id, perk) });
     }
+    [HideFromIl2Cpp]
     private Box ReadObstacle(Transform transform)
     {
         var rect = transform?.TryCast<RectTransform>();
@@ -163,8 +232,11 @@ public sealed class SynergyOverlay : MonoBehaviour
         if (bounds.Valid && !(bounds.W > Screen.width * 0.95f && bounds.H > Screen.height * 0.85f)) _obstacles.Add(bounds);
         return bounds;
     }
+    [HideFromIl2Cpp]
     private static string Safe(string value) => (value ?? "").Replace("<", "‹").Replace(">", "›");
+    [HideFromIl2Cpp]
     private static string Name(string id) => Safe(Plugin.Instance.Catalog.Info(id).Name);
+    [HideFromIl2Cpp]
     private string Details(Offer offer)
     {
         var lines = new List<string> { "<b>" + Name(offer.Id) + "</b>" };
@@ -184,6 +256,7 @@ public sealed class SynergyOverlay : MonoBehaviour
         }
         return string.Join("\n\n", lines);
     }
+    [HideFromIl2Cpp]
     private string Overview(HeroBuild hero)
     {
         var useful = SynergyRules.UsefulSkills(Plugin.Instance.Catalog.Links, hero);

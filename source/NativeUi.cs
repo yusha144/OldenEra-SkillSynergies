@@ -49,6 +49,7 @@ internal sealed class NativeUi
     {
         _panel.gameObject.SetActive(box.Valid);
         if (!box.Valid) return;
+        Body.gameObject.SetActive(true); Footer.gameObject.SetActive(true);
         Position(_panel, box);
         Position(Header.rectTransform, new Box(box.X + 14 * scale, box.Y + 10 * scale, box.W - 28 * scale, 25 * scale));
         Position(Body.rectTransform, new Box(box.X + 14 * scale, box.Y + 43 * scale, box.W - 28 * scale, box.H - 75 * scale));
@@ -61,6 +62,16 @@ internal sealed class NativeUi
         int pages = Math.Max(1, Body.textInfo.pageCount);
         page = Math.Clamp(page, 1, pages); Body.pageToDisplay = page;
         Footer.text = pages > 1 ? $"{page}/{pages} · колесо над панелью · F9 скрыть" : "Наведи на вариант · F9 скрыть";
+    }
+
+    internal void Status(Box box, float scale, string text)
+    {
+        _panel.gameObject.SetActive(box.Valid);
+        if (!box.Valid) return;
+        Body.gameObject.SetActive(false); Footer.gameObject.SetActive(false);
+        Position(_panel, box);
+        Position(Header.rectTransform, new Box(box.X + 8 * scale, box.Y + 5 * scale, box.W - 16 * scale, box.H - 10 * scale));
+        Header.fontSize = 13 * scale * UnitsPerPixel(Root); Header.text = text;
     }
 
     internal void Chip(Box box, string icon, Color tint)
