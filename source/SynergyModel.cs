@@ -30,8 +30,7 @@ internal sealed class HeroBuild
 internal sealed class SynergyHint
 {
     internal Synergy Link;
-    internal string[] Missing;
-    internal bool Ready, AlreadyActive, Temporary;
+    internal bool Temporary;
 }
 
 internal static class SynergyRules
@@ -39,28 +38,15 @@ internal static class SynergyRules
     internal static List<SynergyHint> ForOffer(IEnumerable<Synergy> links, HeroBuild hero, string id, bool isPerk)
     {
         var result = new List<SynergyHint>();
+        // Preview only combinations activated by choosing this offer now.
+        // Already acquired perks / upgrades of a learned skill do not activate presence conditions again.
+        if (isPerk ? hero.Perks.Contains(id) : hero.Skills.Contains(id)) return result;
         foreach (var link in links)
         {
             if (isPerk ? link.PerkId != id : !hero.Perks.Contains(link.PerkId) || !link.RequiredSkills.Contains(id)) continue;
-            // A presence condition has already been met at level 1; upgrading to 2/3 does not activate it again.
-            if (!isPerk && hero.Skills.Contains(id)) continue;
-            var missing = link.RequiredSkills.Where(skill => !hero.Skills.Contains(skill) && (isPerk || skill != id)).ToArray();
-            result.Add(new SynergyHint { Link = link, Missing = missing, Ready = missing.Length == 0,
-                AlreadyActive = isPerk && hero.Perks.Contains(id) && missing.Length == 0,
-                Temporary = hero.TemporaryPerks.Contains(link.PerkId) });
+            if (link.RequiredSkills.Any(skill => !hero.Skills.Contains(skill) && (isPerk || skill != id))) continue;
+            result.Add(new SynergyHint { Link = link, Temporary = hero.TemporaryPerks.Contains(link.PerkId) });
         }
-        return result.OrderByDescending(h => h.Ready).ToList();
-    }
-
-    internal static Dictionary<string, List<Synergy>> UsefulSkills(IEnumerable<Synergy> links, HeroBuild hero)
-    {
-        var result = new Dictionary<string, List<Synergy>>(StringComparer.Ordinal);
-        foreach (var link in links.Where(link => hero.Perks.Contains(link.PerkId)))
-            foreach (string missing in link.RequiredSkills.Where(id => !hero.Skills.Contains(id)).Distinct())
-            {
-                if (!result.TryGetValue(missing, out var list)) result[missing] = list = new();
-                if (!list.Contains(link)) list.Add(link);
-            }
         return result;
     }
 }

@@ -17,12 +17,19 @@ internal static class PanelLayout
     internal static Box Place(float width, float height, float scale, IReadOnlyList<Box> obstacles)
     {
         // Prefer a sidebar; use a shorter panel or footer when the native window is wide.
-        var sizes = new[] { (340f, 390f), (300f, 280f), (280f, 180f), (760f, 142f), (500f, 132f), (280f, 116f) };
+        var sizes = new[] { (340f, 300f), (300f, 280f), (280f, 260f), (620f, 250f), (460f, 250f) };
         return PlaceSizes(width, height, scale, obstacles, sizes);
     }
 
     internal static Box Status(float width, float height, float scale, IReadOnlyList<Box> obstacles)
         => PlaceSizes(width, height, scale, obstacles, new[] { (310f, 30f) });
+
+    internal static Box CardMark(Box card, float scale)
+    {
+        if (!card.Valid || card.H < 24 * scale || card.W < 20 * scale) return default;
+        float height = Math.Min(44 * scale, card.H - 16 * scale);
+        return new Box(card.X + 4 * scale, card.Y + (card.H - height) / 2, 3 * scale, height);
+    }
 
     private static Box PlaceSizes(float width, float height, float scale, IReadOnlyList<Box> obstacles, (float, float)[] sizes)
     {

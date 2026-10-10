@@ -18,26 +18,24 @@ var magic = new Synergy { PerkId = "magic", RequiredSkills = ["night", "day"], E
 Synergy[] links = [economy, magic];
 var hero = new HeroBuild(); hero.AddSkill("economy", 2); hero.AddPerk("tax", 0);
 Check(hero.Perks.Count == 0, "Offered, unselected perks must not generate recommendations");
-Check(SynergyRules.UsefulSkills(links, hero).Count == 0, "No recommendation from inactive perks");
+Check(SynergyRules.ForOffer(links, hero, "logistics", false).Count == 0, "No recommendation from inactive perks");
 hero.AddPerk("tax", 2);
-Check(SynergyRules.UsefulSkills(links, hero).ContainsKey("logistics"), "Existing tax perk recommends logistics");
+Check(SynergyRules.ForOffer(links, hero, "logistics", false).Count == 1, "Existing tax perk recommends offered logistics");
 var offered = SynergyRules.ForOffer(links, hero, "logistics", false);
-Check(offered.Count == 1 && offered[0].Ready, "Learning logistics activates the owned perk");
+Check(offered.Count == 1 && offered[0].Link.PerkId == "tax", "Learning logistics activates the owned perk");
 Check(hero.Skills.SetEquals(["economy"]), "Preview never adds the proposed skill to the actual build");
-Check(!SynergyRules.ForOffer(links, new HeroBuild(), "tax", true).Single().Ready, "New tax perk lacks logistics");
+Check(SynergyRules.ForOffer(links, new HeroBuild(), "tax", true).Count == 0, "Missing logistics must not suggest a future synergy for the offered perk");
 hero.AddSkill("logistics", 1);
-Check(SynergyRules.UsefulSkills(links, hero).Count == 0, "Learned requirements leave the missing list");
 Check(SynergyRules.ForOffer(links, hero, "logistics", false).Count == 0, "Upgrading logistics cannot promise activation again");
-Check(SynergyRules.ForOffer(links, hero, "tax", true).Single().AlreadyActive, "Already active combo is distinguished");
+Check(SynergyRules.ForOffer(links, hero, "tax", true).Count == 0, "Already acquired perk is not a new improvement");
 var hero2 = new HeroBuild(); hero2.AddSkill("logistics", 1);
-Check(SynergyRules.ForOffer(links, hero2, "tax", true).Single().Ready, "Offered perk uses the second hero's learned requirement");
-Check(SynergyRules.ForOffer(links, hero2, "tax", true).Single().AlreadyActive == false, "A proposed perk is not yet active");
+Check(SynergyRules.ForOffer(links, hero2, "tax", true).Count == 1, "Offered perk uses the second hero's learned requirement");
+Check(!hero2.Perks.Contains("tax"), "Preview never acquires the offered perk");
 hero2.AddPerk("magic", 1);
 Check(hero2.TemporaryPerks.Contains("magic"), "Temporarily active perks retain their temporary label");
-Check(!SynergyRules.ForOffer(links, hero2, "night", false).Single().Ready, "One of two conditions is not enough");
-Check(SynergyRules.ForOffer(links, hero2, "night", false).Single().Missing.SequenceEqual(["day"]), "Remaining AND condition is visible");
+Check(SynergyRules.ForOffer(links, hero2, "night", false).Count == 0, "Incomplete AND condition must not highlight the offered skill");
 hero2.AddSkill("day", 1);
-Check(SynergyRules.ForOffer(links, hero2, "night", false).Single().Ready, "Last missing condition completes the combination");
+Check(SynergyRules.ForOffer(links, hero2, "night", false).Single().Temporary, "Last missing condition completes a temporarily owned perk's combination");
 hero2.AddSkill("unknown", 0); Check(!hero2.Skills.Contains("unknown"), "Unlearned level-zero slots are ignored");
 
 using (var json = JsonDocument.Parse("[{\"type\":\"heroStatMap\",\"actionArea\":\"notAllied\",\"parameters\":[\"offence\",\"2\"]}]"))
@@ -47,11 +45,15 @@ using (var json = JsonDocument.Parse("[{\"type\":\"unitStat\",\"receivers\":[\"a
 
 foreach (var size in new[] { (1920f,1080f), (2560f,1440f), (1280f,720f) })
 {
-    float scale = size.Item2 / 1080;
+    float scale = Math.Clamp(size.Item2 / 1080, 0.75f, 2f);
     var obstacles = new[] { new Box(size.Item1 * 0.25f, size.Item2 * 0.2f, size.Item1 * 0.5f, size.Item2 * 0.5f) };
     var panel = PanelLayout.Place(size.Item1, size.Item2, scale, obstacles);
     Check(panel.Valid, "Panel fits outside the central level-up choices");
     Check(!panel.Overlaps(obstacles[0]) && panel.X >= 0 && panel.Y >= 0 && panel.Right <= size.Item1 && panel.Bottom <= size.Item2, "Panel avoids choices and remains on screen");
+    var card = new Box(100, 300, 500 * scale, 130 * scale);
+    var mark = PanelLayout.CardMark(card, scale);
+    Check(mark.Valid && mark.X >= card.X && mark.Y >= card.Y && mark.Right <= card.Right && mark.Bottom <= card.Bottom, "Choice marker stays inside its own card at every supported scale");
+    Check(!mark.Overlaps(new Box(card.X, card.Y - card.H, card.W, card.H)), "Marker cannot appear inside the preceding stat bonus card");
 }
 Check(!PanelLayout.Place(1280, 720, 1, [new Box(0,0,1280,720)]).Valid, "No free space must hide details rather than cover choices");
 var crowded = new[] { new Box(0, 64, 1280, 656) };
@@ -70,13 +72,45 @@ Check(catalog.Links.All(l => !l.Effect.Contains('{') && !l.Effect.Contains('}'))
 Check(!catalog.Links.Any(l => l.PerkId == "sub_skill_assault_1"), "Obsolete localized synergy absent from actual bonus rules is ignored");
 var taxHero = new HeroBuild(); taxHero.AddSkill("skill_economy", 2); taxHero.AddPerk("sub_skill_economy_1", 2);
 var taxHint = SynergyRules.ForOffer(catalog.Links, taxHero, "skill_logistic", false).Single();
-Check(taxHint.Ready && taxHint.Link.Effect == "+250 золота в день", "Real tax collector preview gives exact additional income");
+Check(taxHint.Link.Effect == "+250 золота в день", "Real tax collector preview gives exact additional income");
 Check(catalog.Info("sub_skill_economy_1").Name == "Сборщик податей", "Native Russian perk name resolves");
 Check(SynergyRules.ForOffer(catalog.Links, taxHero, "arena_skill_logistic", false).Count == 0, "Arena and standard skills are not conflated");
 var luckOffer = SynergyRules.ForOffer(catalog.Links, taxHero, "sub_skill_luck_2", true).Single();
-Check(luckOffer.Ready && luckOffer.Link.Effect.Contains("+25%"), "Economy completes the resource-finding perk");
+Check(luckOffer.Link.Effect.Contains("+25%"), "Economy completes the resource-finding perk");
 var unknownHero = new HeroBuild();
-Check(SynergyRules.ForOffer(catalog.Links, unknownHero, "sub_skill_luck_2", true).Single().Missing.SequenceEqual(["skill_economy"]), "New hero sees economy as missing");
+Check(SynergyRules.ForOffer(catalog.Links, unknownHero, "sub_skill_luck_2", true).Count == 0, "New hero does not see future economy as a current improvement");
+
+// Screenshot regression: day magic by itself cannot highlight Arina's mage synergy.
+var arenaHero = new HeroBuild(); arenaHero.AddSkill("arena_skill_magic_day", 3);
+var arina = new ChoiceHint { Id = "arena_sub_skill_magic_day_1", IsPerk = true, Bounds = new Box(100, 300, 500, 130) };
+arina.Hints = SynergyRules.ForOffer(catalog.Links, arenaHero, arina.Id, true);
+Check(arina.Hints.Count == 0, "Arina has no current synergy without other learned magic schools");
+arenaHero.AddSkill("arena_skill_magic_night", 1);
+arina.Hints = SynergyRules.ForOffer(catalog.Links, arenaHero, arina.Id, true);
+Check(arina.Hints.Count == 1 && arina.Hints[0].Link.RequiredSkills.SequenceEqual(["arena_skill_magic_night"]), "Arina shows only the magic school actually learned");
+var detail = HintPresentation.Build([arina], arina, catalog);
+Check(detail.Rows.Count == 1 && detail.Rows[0].Name == "Магия ночи", "Detail identifies the owned skill strengthening this offered perk");
+Check(!detail.Rows.Any(r => r.Name.Contains("Арканная") || r.Note.Contains("+3")) && !detail.Subtitle.Contains("нужно"), "No future schools or repeated numeric explanations in the panel");
+Check(arenaHero.Perks.Count == 0 && arenaHero.Skills.Count == 2, "Presentation does not change the hero build");
+arenaHero.AddSkill("arena_skill_magic_space", 1);
+arina.Hints = SynergyRules.ForOffer(catalog.Links, arenaHero, arina.Id, true);
+Check(HintPresentation.Build([arina], arina, catalog).Rows.Count == 2, "Each currently learned related school is displayed once");
+var taxChoice = new ChoiceHint { Id = "skill_logistic", IsPerk = false, Hints = SynergyRules.ForOffer(catalog.Links, taxHero, "skill_logistic", false) };
+var taxPanel = HintPresentation.Build([taxChoice], taxChoice, catalog);
+Check(taxPanel.Subtitle == "Усилит ваши перки" && taxPanel.Rows.Single().Name == "Сборщик податей", "Reverse direction identifies the owned perk improved by an offered skill");
+Check(HintPresentation.Build([], null, catalog).Rows.Count == 0, "Overview cannot recommend skills that are not offered now");
+
+var selection = new HintSelection();
+Check(selection.Observe("hero1-stage1", "a", ["a", "b"]) && selection.Id == "a", "Hover selects the inspected perk");
+Check(!selection.Observe("hero1-stage1", null, ["a", "b"]) && selection.Id == "a", "Crossing the gap to the panel preserves both selection and page");
+Check(!selection.Observe("hero1-stage1", null, ["a", "b"]) && selection.Id == "a", "Reading and scrolling the panel keeps its original context");
+Check(selection.Observe("hero1-stage1", "b", ["a", "b"]) && selection.Id == "b", "Hovering another choice replaces the details and resets its page");
+Check(selection.Observe("hero2-stage1", null, ["a", "b"]) && selection.Id == "", "Another hero cannot inherit a stale inspected perk");
+selection.Observe("hero2-stage1", "a", ["a"]);
+Check(selection.Observe("hero2-stage2", null, ["b"]) && selection.Id == "", "A completed choice cannot remain on the next level-up stage");
+var rowPages = RowPagination.Split([70, 70, 70], 150);
+Check(rowPages.Count == 2 && rowPages[0].Start == 0 && rowPages[0].Count == 2 && rowPages[1].Start == 2 && rowPages[1].Count == 1, "Names and explanations stay together when paging");
+Check(RowPagination.Split([], 150).Single().Count == 0, "Empty result has a valid empty page");
 
 // Verify the catalog rejects unknown conditions instead of dropping them.
 string temporary = Path.Combine(Path.GetTempPath(), "synergy-test-" + Guid.NewGuid() + ".zip");

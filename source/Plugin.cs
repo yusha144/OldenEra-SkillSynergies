@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 
 namespace OldenEra.SkillSynergies;
 
-[BepInPlugin("local.oldenera.skillsynergies", "Olden Era Skill Synergies", "0.1.1")]
+[BepInPlugin("local.oldenera.skillsynergies", "Olden Era Skill Synergies", "0.1.2")]
 public sealed class Plugin : BasePlugin
 {
     internal static Plugin Instance;
@@ -22,7 +22,7 @@ public sealed class Plugin : BasePlugin
             { Log.LogWarning("Skill Synergies disabled: unsupported game build (expected Steam 25672315)."); return; }
             Catalog.Load(Path.Combine(Paths.GameRootPath, "HeroesOldenEra_Data", "StreamingAssets", "Core.zip"));
             AddComponent<SynergyOverlay>();
-            Log.LogInfo($"Skill Synergies 0.1.1 loaded: {Catalog.Links.Count} direct combinations, {Catalog.SkippedConditions} unsupported condition groups skipped. Initial visibility={Enabled.Value}. F9 toggles hints inside skill selection, for this session only.");
+            Log.LogInfo($"Skill Synergies 0.1.2 loaded: {Catalog.Links.Count} direct combinations, {Catalog.SkippedConditions} unsupported condition groups skipped. Current-build combinations only. Initial visibility={Enabled.Value}. F9 toggles hints inside skill selection, for this session only.");
         }
         catch (Exception error) { Log.LogError($"Skill Synergies could not start: {error}"); }
     }
