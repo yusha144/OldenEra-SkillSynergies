@@ -8,11 +8,12 @@ internal sealed class SynergyCatalog
     internal readonly Dictionary<string, SkillInfo> Infos = new(StringComparer.Ordinal);
     internal readonly List<Synergy> Links = new();
     internal readonly Dictionary<string, List<string>> PerkParents = new(StringComparer.Ordinal);
-    internal int SkippedConditions;
+    internal int SkippedConditions, SkippedEffects;
+    internal readonly List<string> UnsupportedEffectPerks = new();
 
     internal void Load(string corePath)
     {
-        Infos.Clear(); Links.Clear(); PerkParents.Clear(); SkippedConditions = 0;
+        Infos.Clear(); Links.Clear(); PerkParents.Clear(); UnsupportedEffectPerks.Clear(); SkippedConditions = 0; SkippedEffects = 0;
         using var zip = ZipFile.OpenRead(corePath);
         var language = new Dictionary<string, string>();
         foreach (var entry in zip.Entries.Where(e => e.FullName.StartsWith("Lang/russian/texts/") && e.FullName.EndsWith(".json")))
@@ -41,12 +42,15 @@ internal sealed class SynergyCatalog
         }
         var actions = new Dictionary<string, JsonElement>();
         foreach (var actionRow in Rows(zip, "DB/hero_action_bonuses/")) actions[Text(actionRow, "id")] = actionRow;
+        var buffInfos = new Dictionary<string, JsonElement>();
+        foreach (var buff in Rows(zip, "DB/side_buffs/bonus_buff_infos/")) buffInfos[Text(buff, "id")] = buff;
+        var buffs = new Dictionary<string, JsonElement>();
+        foreach (var buff in Rows(zip, "DB/buffs/")) buffs[Text(buff, "id")] = buff;
         foreach (var row in Rows(zip, "DB/heroes_skills/sub_skills/"))
         {
             string id = Text(row, "id");
             if (!usedPerks.Contains(id)) continue; // Do not use obsolete descriptions or test-only perks.
             Infos[id] = new SkillInfo { Id = id, Name = Local(Text(row, "name")), Icon = Text(row, "icon"), IsPerk = true };
-            string description = Local(Text(row, "desc"));
             foreach (var bonus in row.GetProperty("bonuses").EnumerateArray())
             {
                 if (Text(bonus, "type") != "heroActionBonusAddition") continue;
@@ -61,8 +65,10 @@ internal sealed class SynergyCatalog
                         { SkippedConditions++; continue; }
                         var required = conditions.Select(c => Strings(c, "parameters")[0]).Distinct().ToArray();
                         if (required.Any(sid => !Infos.TryGetValue(sid, out var info) || info.IsPerk)) { SkippedConditions++; continue; }
-                        var link = new Synergy { PerkId = id, RequiredSkills = required,
-                            Effect = BonusText.Describe(action.GetProperty("bonuses"), description, row.GetProperty("bonuses")) };
+                        var changes = BonusText.ReadChanges(action.GetProperty("bonuses"), row.GetProperty("bonuses"), buffInfos, buffs, Local);
+                        if (changes == null || changes.Count == 0)
+                        { SkippedEffects++; if (!UnsupportedEffectPerks.Contains(id)) UnsupportedEffectPerks.Add(id); continue; }
+                        var link = new Synergy { PerkId = id, RequiredSkills = required, Changes = changes, Effect = BonusText.Describe(changes) };
                         if (!Links.Any(old => old.PerkId == id && old.RequiredSkills.SequenceEqual(required) && old.Effect == link.Effect)) Links.Add(link);
                     }
                 }

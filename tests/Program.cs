@@ -4,6 +4,7 @@ using System.IO.Compression;
 
 int checks = 0;
 void Check(bool ok, string name) { if (!ok) throw new Exception(name); checks++; }
+string Direct(JsonElement extra, JsonElement baseline) => BonusText.Describe(BonusText.ReadChanges(extra, baseline, null, null, key => key));
 // Window lookup regression: the legacy singleton is null in this game build.
 // Registry entries may include unopened windows or destroyed/stale cached objects.
 bool Visible(string window) => window == "standard-open" || window == "arena-open";
@@ -39,9 +40,9 @@ Check(SynergyRules.ForOffer(links, hero2, "night", false).Single().Temporary, "L
 hero2.AddSkill("unknown", 0); Check(!hero2.Skills.Contains("unknown"), "Unlearned level-zero slots are ignored");
 
 using (var json = JsonDocument.Parse("[{\"type\":\"heroStatMap\",\"actionArea\":\"notAllied\",\"parameters\":[\"offence\",\"2\"]}]"))
-    Check(BonusText.Describe(json.RootElement, "").Contains("вне своей территории"), "Territorial condition cannot disappear from the effect summary");
+    Check(Direct(json.RootElement, json.RootElement).Contains("вне своей территории"), "Territorial condition cannot disappear from the effect summary");
 using (var json = JsonDocument.Parse("[{\"type\":\"unitStat\",\"receivers\":[\"avatar\"],\"parameters\":[\"hp\",\"2\"]}]"))
-    Check(BonusText.Describe(json.RootElement, "Бонус удваивается").Contains("при его обычных условиях"), "Targeted units are not presented as a universal stat gain");
+    Check(Direct(json.RootElement, json.RootElement).Contains("аватара"), "Targeted units are not presented as a universal stat gain");
 
 foreach (var size in new[] { (1920f,1080f), (2560f,1440f), (1280f,720f) })
 {
@@ -65,14 +66,39 @@ Check(!PanelLayout.Status(1280, 720, 1, [new Box(0,0,1280,720)]).Valid, "Status 
 // Integration with installed read-only game data; no game methods or saves are accessed.
 string core = args.Length > 0 ? args[0] : @"E:\Steam_M2\steamapps\common\Heroes of Might and Magic Olden Era\HeroesOldenEra_Data\StreamingAssets\Core.zip";
 var catalog = new SynergyCatalog(); catalog.Load(core);
-Check(catalog.Links.Count > 100, "All mode-specific catalogs load");
+Check(catalog.Links.Count == 154 && catalog.SkippedEffects == 0, $"All 154 mode-specific relations have exact numeric effects; loaded {catalog.Links.Count}, skipped {catalog.SkippedEffects}: {string.Join(",", catalog.UnsupportedEffectPerks)}");
 Check(catalog.SkippedConditions == 0, "Current direct action conditions are supported");
 Check(catalog.Links.All(l => l.RequiredSkills.Length > 0 && l.RequiredSkills.All(catalog.Infos.ContainsKey)), "Every relation resolves to known skills");
 Check(catalog.Links.All(l => !l.Effect.Contains('{') && !l.Effect.Contains('}')), "No untranslated numeric placeholders enter the UI");
+Check(catalog.Links.All(l => l.Changes.Count > 0 && l.Changes.All(c => c.Part != null)), "Every displayed synergy has structured numeric changes");
+Check(catalog.Links.All(l => !l.Effect.Contains('→') && !l.Effect.Contains('□') && !l.Effect.Contains("описании") && l.Effect.Any(char.IsDigit)), "No missing-arrow glyph or vague description fallback in any current relation");
 Check(!catalog.Links.Any(l => l.PerkId == "sub_skill_assault_1"), "Obsolete localized synergy absent from actual bonus rules is ignored");
+string Effect(string id) => catalog.Links.First(l => l.PerkId == id).Effect;
+Check(Effect("arena_sub_skill_magic_night_2") == "Максимальное здоровье существ противника: с -1 до -2.", "Chronic Weakness shows the exact enemy health reduction");
+Check(Effect("sub_skill_trainer_3").Contains("с +2 до +3"), "Veterans uses actual +1 increase instead of trusting the translated doubling claim");
+Check(Effect("campaign_sub_skill_trainer_3").Contains("с +2 до +4"), "Campaign Veterans uses its own +2 increase");
+Check(Effect("sub_skill_assault_3").Contains("при атаке") && Effect("sub_skill_assault_3").Contains("с +1 до +2"), "Concentration generation retains attack trigger and numeric increase");
+Check(Effect("sub_skill_protection_3").Contains("при получении урона"), "Taking-damage trigger remains distinct from attacking");
+Check(Effect("sub_skill_formation_4").Contains("кроме первого"), "Round-based concentration excludes first round");
+Check(Effect("sub_skill_tactics_1").Contains("с +2 до +4") && Effect("sub_skill_tactics_1").Contains("соседний отряд противника"), "Indirect offensive tactics buff resolves numeric amount and enemy adjacency");
+Check(Effect("sub_skill_tactics_4").Contains("соседний дружественный отряд"), "Defensive tactics retains allied adjacency");
+Check(Effect("sub_skill_summoner_2") == "Здоровье аватара: с 4 до 5.", "Health override replaces previous override rather than adding 5");
+Check(Effect("arena_sub_skill_summoner_2") == "Здоровье аватара: устанавливается на 5.", "Arena additive base and absolute override are not incorrectly summed");
+Check(Effect("sub_skill_summoner_1") == "Урон аватара: с +40% до +80%.", "Three avatar variants collapse visually without tripling the numeric bonus");
+Check(Effect("sub_skill_logistic_4") == "Стоимость нейтральных походных заклинаний: с -4 до -8 маны.", "Equivalent changes to all six adventure spells remain compact and exact");
+Check(Effect("sub_skill_trainer_5").Contains("1-3-го рангов") && Effect("sub_skill_trainer_5").Split('\n').Length == 2, "Elite Guard retains rank restriction while merging equal per-rank entries");
+Check(Effect("sub_skill_battlemage_5").Contains("с +15% до +30% от знаний героя"), "Hero-stat scaling is shown as a coefficient, not invented flat defense");
+foreach (var link in catalog.Links)
+{
+    var current = new HeroBuild();
+    foreach (string skill in link.RequiredSkills) current.AddSkill(skill, 1);
+    var candidate = new ChoiceHint { Id = link.PerkId, IsPerk = true, Hints = SynergyRules.ForOffer(catalog.Links, current, link.PerkId, true) };
+    var preview = HintPresentation.Build([candidate], candidate, catalog, current);
+    Check(preview.Rows.Count > 0 && preview.Rows.All(r => r.Effect.Any(char.IsDigit) && !r.Effect.Contains("описании")), "Numeric perk-offer coverage: " + link.PerkId + "/" + string.Join(",", link.RequiredSkills));
+}
 var taxHero = new HeroBuild(); taxHero.AddSkill("skill_economy", 2); taxHero.AddPerk("sub_skill_economy_1", 2);
 var taxHint = SynergyRules.ForOffer(catalog.Links, taxHero, "skill_logistic", false).Single();
-Check(taxHint.Link.Effect == "+250 золота в день", "Real tax collector preview gives exact additional income");
+Check(taxHint.Link.Effect == "Золото: с +250 до +500 в день.", "Real tax collector preview gives exact additional income");
 Check(catalog.Info("sub_skill_economy_1").Name == "Сборщик податей", "Native Russian perk name resolves");
 Check(SynergyRules.ForOffer(catalog.Links, taxHero, "arena_skill_logistic", false).Count == 0, "Arena and standard skills are not conflated");
 var luckOffer = SynergyRules.ForOffer(catalog.Links, taxHero, "sub_skill_luck_2", true).Single();
@@ -90,15 +116,32 @@ arina.Hints = SynergyRules.ForOffer(catalog.Links, arenaHero, arina.Id, true);
 Check(arina.Hints.Count == 1 && arina.Hints[0].Link.RequiredSkills.SequenceEqual(["arena_skill_magic_night"]), "Arina shows only the magic school actually learned");
 var detail = HintPresentation.Build([arina], arina, catalog, arenaHero);
 Check(detail.Rows.Count == 1 && detail.Rows[0].Name == catalog.Info("arena_skill_magic_night").NameAt(1), "Detail identifies the owned skill and its current level strengthening this offered perk");
-Check(!detail.Rows.Any(r => r.Name.Contains("Арканная") || r.Effect.Contains("+3")) && !detail.Subtitle.Contains("нужно"), "No future schools or repeated numeric explanations on a perk's own card");
+Check(!detail.Rows.Any(r => r.Name.Contains("Арканная")) && detail.Rows[0].Effect.Contains("с +6 до +9") && !detail.Subtitle.Contains("нужно"), "Only current schools contribute and their exact numeric effect is shown");
 Check(arenaHero.Perks.Count == 0 && arenaHero.Skills.Count == 2, "Presentation does not change the hero build");
 arenaHero.AddSkill("arena_skill_magic_space", 1);
 arina.Hints = SynergyRules.ForOffer(catalog.Links, arenaHero, arina.Id, true);
 Check(HintPresentation.Build([arina], arina, catalog, arenaHero).Rows.Count == 2, "Each currently learned related school is displayed once");
+var arinaTwoSchools = HintPresentation.Build([arina], arina, catalog, arenaHero);
+Check(arinaTwoSchools.Rows.All(r => r.Effect.Contains("ещё +3; бонус перка +12")), "Two schools each contribute +3, with the combined perk bonus +12 shown instead of two misleading +9 totals");
+var existingMage = new HeroBuild(); existingMage.AddSkill("arena_skill_magic_day", 3); existingMage.AddSkill("arena_skill_magic_night", 2);
+existingMage.AddPerk(arina.Id, 2, "arena_skill_magic_day");
+var newSchool = new ChoiceHint { Id = "arena_skill_magic_space", Level = 2, Hints = SynergyRules.ForOffer(catalog.Links, existingMage, "arena_skill_magic_space", false) };
+Check(HintPresentation.Build([newSchool], newSchool, catalog, existingMage).Rows.Single().Effect.Contains("с +9 до +12"), "Existing active synergies are included in before/after for a newly offered school");
+var nightHero = new HeroBuild(); nightHero.AddSkill("arena_skill_magic_night", 2);
+var cork = new ChoiceHint { Id = "arena_sub_skill_resistance_1", IsPerk = true, Hints = SynergyRules.ForOffer(catalog.Links, nightHero, "arena_sub_skill_resistance_1", true) };
+var corkPanel = HintPresentation.Build([cork], cork, catalog, nightHero);
+Check(corkPanel.Rows.Count == 1 && corkPanel.Rows[0].Effect == "Стоимость заклинаний школы «Ночь» противника: с +20% до +40%.", "Screenshot Cork shows exact enemy mana-cost increase for the learned night school");
+nightHero.AddSkill("arena_skill_magic_day", 1);
+cork.Hints = SynergyRules.ForOffer(catalog.Links, nightHero, cork.Id, true);
+corkPanel = HintPresentation.Build([cork], cork, catalog, nightHero);
+Check(corkPanel.Rows.Count == 2 && corkPanel.Rows.All(r => r.Effect.Contains("с +20% до +40%")), "Independent school surcharges never stack into +60% on one school");
+var corkOwner = new HeroBuild(); corkOwner.AddSkill("arena_skill_resistance", 2); corkOwner.AddPerk(cork.Id, 2, "arena_skill_resistance");
+var nightOffer = new ChoiceHint { Id = "arena_skill_magic_night", Level = 2, Hints = SynergyRules.ForOffer(catalog.Links, corkOwner, "arena_skill_magic_night", false) };
+Check(HintPresentation.Build([nightOffer], nightOffer, catalog, corkOwner).Rows.Single().Effect.Contains("с +20% до +40%"), "Cork also shows numeric effects in the reverse direction");
 var taxChoice = new ChoiceHint { Id = "skill_logistic", IsPerk = false, Hints = SynergyRules.ForOffer(catalog.Links, taxHero, "skill_logistic", false) };
 var taxPanel = HintPresentation.Build([taxChoice], taxChoice, catalog, taxHero);
 Check(taxPanel.Subtitle == "Усилит ваши перки" && taxPanel.Rows.Single().Name == "Сборщик податей", "Reverse direction identifies the owned perk improved by an offered skill");
-Check(taxPanel.Rows.Single().Effect == "+250 золота в день", "Owned perk details show the extra benefit absent from the offered main skill description");
+Check(taxPanel.Rows.Single().Effect == "Золото: с +250 до +500 в день.", "Owned perk details show the extra benefit absent from the offered main skill description");
 Check(HintPresentation.Build([], null, catalog, taxHero).Rows.Count == 0, "Overview cannot recommend skills that are not offered now");
 
 // Screenshot regression: Resoluteness belongs to advanced Leadership, while the offered
@@ -114,7 +157,7 @@ foreach (string prefix in new[] { "", "arena_", "campaign_" })
     var shown = HintPresentation.Build([formation, leadership], formation, catalog, leader);
     var row = shown.Rows.Single();
     Check(row.Name == "Решимость" && row.Note == "Из навыка: Продвинутое лидерство", prefix + "Actual acquired parent skill level is shown");
-    Check(row.Effect.Contains("+1% → +2%") && row.Effect.Contains("за единицу боевого духа") && row.Effect.Contains("дружественных"), prefix + "Resoluteness retains exact before/after, target and per-morale restriction");
+    Check(row.Effect.Contains("с +1% до +2%") && row.Effect.Contains("за единицу боевого духа") && row.Effect.Contains("дружественных"), prefix + "Resoluteness retains exact before/after, target and per-morale restriction");
     Check(shown.Title == catalog.Info(formation.Id).NameAt(2) && !shown.Title.Contains("лидерство"), prefix + "Activating offer is distinguished from the owned perk's parent");
     Check(leadership.Hints.Count == 0 && leader.Level(prefix + "skill_leadership") == 2 && !leader.Skills.Contains(formation.Id), prefix + "Preview never acquires either offered skill or substitutes offered level for current level");
     leader.AddSkill(formation.Id, 2);
@@ -129,7 +172,10 @@ ambiguousHero.AddPerk("p", 1, "b");
 Check(ambiguousCatalog.ParentOf("p", ambiguousHero) == "b", "Actual hero perk container disambiguates the source skill");
 using (var baseBonus = JsonDocument.Parse("[{\"type\":\"unitStat\",\"parameters\":[\"additionalActionChanceModifier\",\"0.01\"]}]"))
 using (var extraBonus = JsonDocument.Parse("[{\"type\":\"unitStat\",\"receiverAllegiance\":\"enemy\",\"parameters\":[\"additionalActionChanceModifier\",\"0.01\"]}]"))
-    Check(!BonusText.Describe(extraBonus.RootElement, "Бонус удваивается", baseBonus.RootElement).Contains("дружественных"), "Different target cannot inherit Resoluteness's allied summary");
+    Check(!Direct(extraBonus.RootElement, baseBonus.RootElement).Contains("дружественных"), "Different target cannot inherit Resoluteness's allied summary");
+using (var extraBonus = JsonDocument.Parse("[{\"type\":\"unitStat\",\"chance\":0.5,\"parameters\":[\"hp\",\"2\"]}]"))
+using (var baseline = JsonDocument.Parse("[]"))
+    Check(BonusText.ReadChanges(extraBonus.RootElement, baseline.RootElement, null, null, key => key) == null, "An unrecognized scope or chance field cannot be silently dropped");
 
 foreach (var size in new[] { (1790f,1227f), (1920f,1080f), (2560f,1440f), (1280f,720f) })
 {

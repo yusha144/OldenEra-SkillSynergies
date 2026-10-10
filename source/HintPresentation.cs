@@ -38,7 +38,7 @@ internal static class HintPresentation
         {
             panel.Title = catalog.Info(selected.Id).NameAt(selected.Level);
             panel.Subtitle = selected.Hints.Count == 0 ? "С текущими умениями усилений нет"
-                : selected.IsPerk ? "Усилен изученными навыками" : "Усилит ваши перки";
+                : selected.IsPerk ? "Бонус с вашими навыками" : "Усилит ваши перки";
             foreach (string id in Related(selected))
             {
                 var info = catalog.Info(id);
@@ -46,14 +46,9 @@ internal static class HintPresentation
                 string parent = selected.IsPerk ? null : catalog.ParentOf(id, hero);
                 string source = parent == null ? "" : "Из навыка: " + catalog.Info(parent).NameAt(hero.Level(parent));
                 if (temporary) source += (source.Length == 0 ? "" : "\n") + "Временный перк";
-                var effects = new List<string>();
-                // A main-skill card doesn't describe its effect on an already owned perk.
-                // Perk cards already contain their own bonuses, so don't repeat those descriptions.
-                if (!selected.IsPerk)
-                    foreach (var hint in selected.Hints.Where(h => h.Link.PerkId == id))
-                        if (!effects.Contains(hint.Link.Effect)) effects.Add(hint.Link.Effect);
+                var related = selected.Hints.Where(h => selected.IsPerk ? h.Link.RequiredSkills.Contains(id) : h.Link.PerkId == id).ToList();
                 panel.Rows.Add(new HintRow { Icon = info.IconAt(hero.Level(id)), Name = info.NameAt(hero.Level(id)), Note = source,
-                    Effect = string.Join("\n", effects) });
+                    Effect = BonusText.Preview(related, selected.Hints, catalog.Links, hero, selected.IsPerk) });
             }
             return panel;
         }

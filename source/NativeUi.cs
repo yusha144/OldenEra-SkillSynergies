@@ -41,9 +41,7 @@ internal sealed class NativeUi
         _panel = CreateRect("Combinations", Root);
         Frame = _panel.gameObject.AddComponent<Image>(); Frame.color = new Color(0.045f, 0.07f, 0.11f, 1); Frame.raycastTarget = false;
         var outline = Inset("BrassOutline", _panel, 1, new Color(0.54f, 0.48f, 0.33f, 1));
-        var background = Inset("BlueSlate", outline, 1, new Color(0.14f, 0.18f, 0.25f, 1));
-        var inner = Inset("InnerRule", background, 5, new Color(0.40f, 0.39f, 0.34f, 1));
-        Inset("ContentBackground", inner, 0.7f, new Color(0.14f, 0.18f, 0.25f, 1));
+        Inset("BlueSlate", outline, 1, new Color(0.14f, 0.18f, 0.25f, 1));
         Header = CreateText("Heading", _panel); Header.color = new Color(0.86f, 0.75f, 0.48f);
         Body = CreateText("ChoiceName", _panel);
         _subtitle = CreateText("RelationDirection", _panel); _subtitle.color = new Color(0.75f, 0.77f, 0.77f);
@@ -65,7 +63,7 @@ internal sealed class NativeUi
     internal float MeasureHeight(float width, float scale, HintPanel content)
     {
         Prepare(content, width - 32 * scale, scale);
-        float height = _rowsOffset + 36 * scale;
+        float height = _rowsOffset + 20 * scale;
         for (int i = 0; i < content.Rows.Count; i++) height += _rows[i].Height;
         return height;
     }
@@ -110,7 +108,10 @@ internal sealed class NativeUi
         float subtitleY = box.Y + 44 * scale + _titleHeight;
         Position(_subtitle.rectTransform, new Box(x, subtitleY, width, _subtitleHeight));
         float top = box.Y + _rowsOffset + 8 * scale;
-        float available = Math.Max(32 * scale, box.Bottom - 28 * scale - top);
+        float available = Math.Max(32 * scale, box.Bottom - 12 * scale - top);
+        var fullHeights = new List<float>();
+        for (int i = 0; i < content.Rows.Count; i++) fullHeights.Add(_rows[i].Height);
+        if (RowPagination.Split(fullHeights, available).Count > 1) available -= 22 * scale;
         Position(_rowViewport, new Box(x, top, width, available));
         var heights = new List<float>();
         for (int i = 0; i < content.Rows.Count; i++)
@@ -151,7 +152,8 @@ internal sealed class NativeUi
             y += row.Height;
         }
         Position(Footer.rectTransform, new Box(x, box.Bottom - 23 * scale, width, 16 * scale));
-        SetText(Footer, pages.Count > 1 ? $"{page}/{pages.Count} · колёсико над панелью · F9 скрыть" : "F9 скрыть", 10 * scale, units);
+        Footer.gameObject.SetActive(pages.Count > 1);
+        SetText(Footer, pages.Count > 1 ? $"{page}/{pages.Count} · колёсико над панелью" : "", 10 * scale, units);
     }
 
     internal void Status(Box box, float scale, string text)

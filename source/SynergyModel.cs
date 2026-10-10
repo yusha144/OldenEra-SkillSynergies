@@ -13,6 +13,7 @@ internal sealed class Synergy
 {
     internal string PerkId, Effect;
     internal string[] RequiredSkills;
+    internal List<BonusChange> Changes = new();
 }
 
 internal sealed class HeroBuild

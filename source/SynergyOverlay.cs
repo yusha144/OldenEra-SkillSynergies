@@ -201,8 +201,8 @@ public sealed class SynergyOverlay : MonoBehaviour
         _ui.End();
         if (!_visible)
         {
-            _panelBox = PanelLayout.Status(Screen.width, Screen.height, scale, _obstacles);
-            _ui.Status(_panelBox, scale, "Сочетания скрыты · F9 показать");
+            _panelBox = default;
+            _ui.Show(false);
             return;
         }
         var content = HintPresentation.Build(_offers, selected, Plugin.Instance.Catalog, hero);
