@@ -5,12 +5,12 @@ namespace OldenEra.SkillSynergies;
 
 internal static class BonusText
 {
-    internal static string Describe(JsonElement bonuses, string description)
+    internal static string Describe(JsonElement bonuses, string description, JsonElement baseBonuses = default)
     {
         var lines = new List<string>(); bool unresolved = false;
         foreach (var bonus in bonuses.EnumerateArray())
         {
-            string line = DescribeOne(bonus);
+            string line = DescribeOne(bonus, baseBonuses);
             if (line == null) unresolved = true;
             else if (!lines.Contains(line)) lines.Add(line);
         }
@@ -24,7 +24,7 @@ internal static class BonusText
         return lines.Count > 0 ? string.Join("; ", lines) : "Дополнительный эффект перка.";
     }
 
-    private static string DescribeOne(JsonElement bonus)
+    private static string DescribeOne(JsonElement bonus, JsonElement baseBonuses)
     {
         var p = SynergyCatalog.Strings(bonus, "parameters");
         var receivers = SynergyCatalog.Strings(bonus, "receivers");
@@ -38,6 +38,28 @@ internal static class BonusText
             return (value >= 0 ? "+" : "−") + Math.Abs(value).ToString("0.##", CultureInfo.InvariantCulture) + (percent ? "%" : "");
         }
         string Signed(string label, string raw, bool percent = false) => Number(raw, percent) is string n ? n + " " + label : null;
+        // Resoluteness: this unit modifier is a chance per morale point, not flat hero morale.
+        // Only summarize its unscoped allied form; retain the conservative fallback for other targets.
+        if (type == "unitStat" && key == "additionalActionChanceModifier" && p.Length == 2
+            && string.IsNullOrEmpty(SynergyCatalog.Text(bonus, "actionArea"))
+            && SynergyCatalog.Text(bonus, "receiverAllegiance") is "" or "ally"
+            && baseBonuses.ValueKind == JsonValueKind.Array
+            && decimal.TryParse(p[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var added))
+        {
+            decimal before = 0; bool found = false;
+            foreach (var original in baseBonuses.EnumerateArray())
+            {
+                var values = SynergyCatalog.Strings(original, "parameters");
+                if (SynergyCatalog.Text(original, "type") != type || values.Length != 2 || values[0] != key) continue;
+                if (SynergyCatalog.Strings(original, "receivers").Length > 0 || !string.IsNullOrEmpty(SynergyCatalog.Text(original, "actionArea"))
+                    || SynergyCatalog.Text(original, "receiverAllegiance") is not ("" or "ally")) return null;
+                if (!decimal.TryParse(values[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var value)) return null;
+                before += value; found = true;
+            }
+            if (found) return "Шанс дополнительного хода у дружественных существ: "
+                + Number(before.ToString(CultureInfo.InvariantCulture), true) + " → "
+                + Number((before + added).ToString(CultureInfo.InvariantCulture), true) + " за единицу боевого духа.";
+        }
         if (type == "sideRes") return key switch {
             "gold" => Signed("золота в день", p[1]), "dust" => Signed("алхимической пыли в день", p[1]), _ => null };
         if (type == "astrologyExp" && p[1] == "0.0") return Signed("очков астрологии в день", p[0]);

@@ -122,6 +122,13 @@ public sealed class SynergyOverlay : MonoBehaviour
         if (data?.skills?.list == null)
         { _ui?.Show(false); Diagnostic("Registered level-up window is open; waiting for hero skill data."); return; }
         var sample = window.currentLevel;
+        // Use the card's regular native font, rather than the bold level-ribbon style.
+        if (window.cile?.chpe?.TryCast<dzq>() != null && window.statsAndSkillsView?.skillViews != null)
+            foreach (var view in window.statsAndSkillsView.skillViews)
+                if (IsElementVisible(view) && view.title && view.title.font) { sample = view.title; break; }
+        if (window.cile?.chpe?.TryCast<dzr>() != null && window.subSkillsView?.subSkillViews != null)
+            foreach (var view in window.subSkillsView.subSkillViews)
+                if (IsElementVisible(view) && view.title && view.title.font) { sample = view.title; break; }
         if (!sample || !sample.font)
         { _ui?.Show(false); Diagnostic("Registered level-up window is open; native font is not ready."); return; }
         if (_ui == null || !_ui.Root || _owner != window.Pointer)
@@ -139,7 +146,7 @@ public sealed class SynergyOverlay : MonoBehaviour
             hero.AddSkill(skill.sid, skill.level);
             if (skill.subSkills != null)
                 foreach (var perk in skill.subSkills)
-                    if (perk != null) hero.AddPerk(perk.sid, (int)perk.status);
+                    if (perk != null) hero.AddPerk(perk.sid, (int)perk.status, skill.sid);
         }
         _offers.Clear(); _obstacles.Clear();
         _skills.Clear(); _perks.Clear(); _buttons.Clear();
@@ -160,7 +167,7 @@ public sealed class SynergyOverlay : MonoBehaviour
             if (!IsElementVisible(view)) continue;
             Box bounds = ReadObstacle(view.transform);
             if (!_choicePointers.Contains(view.Pointer) || !view.isSelectable || view.cikp?.chrk == null || !bounds.Valid) continue;
-            AddOffer(view.cikp.chrk.sid, false, bounds, hero);
+            AddOffer(view.cikp.chrk.sid, false, bounds, hero, view.cikp.chrk.level);
         }
         foreach (var view in _perks)
         {
@@ -176,7 +183,7 @@ public sealed class SynergyOverlay : MonoBehaviour
         if (_offers.Count == 0)
             Diagnostic($"Waiting for offered cards: skill views={_skills.Count}, perk views={_perks.Count}, arena={window.cilk}.");
         string context = data.id + ":" + (perkStage ? "perks:" : "skills:") + string.Join(",", _offers.Select(o => o.Id).OrderBy(id => id))
-            + ":" + string.Join(",", hero.Skills.OrderBy(id => id)) + ":" + string.Join(",", hero.Perks.OrderBy(id => id))
+            + ":" + string.Join(",", hero.SkillLevels.OrderBy(pair => pair.Key).Select(pair => pair.Key + "=" + pair.Value)) + ":" + string.Join(",", hero.Perks.OrderBy(id => id))
             + ":" + string.Join(",", hero.TemporaryPerks.OrderBy(id => id));
         if (context != _lastContext)
         {
@@ -198,7 +205,11 @@ public sealed class SynergyOverlay : MonoBehaviour
             _ui.Status(_panelBox, scale, "Сочетания скрыты · F9 показать");
             return;
         }
-        _panelBox = PanelLayout.Place(Screen.width, Screen.height, scale, _obstacles);
+        var content = HintPresentation.Build(_offers, selected, Plugin.Instance.Catalog, hero);
+        if (_offers.Count == 0) { content.Title = "Выбор умений"; content.Subtitle = "Ожидаю варианты…"; }
+        var anchor = PanelLayout.Group(_offers.Select(offer => offer.Bounds));
+        _panelBox = PanelLayout.Place(Screen.width, Screen.height, scale, _obstacles, anchor,
+            width => _ui.MeasureHeight(width, scale, content));
         if (!_panelBox.Valid && Time.unscaledTime >= _nextLayoutLog)
         {
             Plugin.Instance.Log.LogWarning("No unobstructed space for synergy details; applicable choice marks remain visible.");
@@ -210,16 +221,14 @@ public sealed class SynergyOverlay : MonoBehaviour
             _ui.Status(_panelBox, scale, "Сочетания: нет места для панели");
             return;
         }
-        var content = HintPresentation.Build(_offers, selected, Plugin.Instance.Catalog);
-        if (_offers.Count == 0) { content.Title = "Выбор умений"; content.Subtitle = "Ожидаю варианты…"; }
         _ui.Panel(_panelBox, scale, content, ref _page);
     }
 
     [HideFromIl2Cpp]
-    private void AddOffer(string id, bool perk, Box bounds, HeroBuild hero)
+    private void AddOffer(string id, bool perk, Box bounds, HeroBuild hero, int level = 0)
     {
         if (string.IsNullOrEmpty(id) || _offers.Any(o => o.Id == id)) return;
-        _offers.Add(new ChoiceHint { Id = id, IsPerk = perk, Bounds = bounds, Hints = SynergyRules.ForOffer(Plugin.Instance.Catalog.Links, hero, id, perk) });
+        _offers.Add(new ChoiceHint { Id = id, IsPerk = perk, Level = level, Bounds = bounds, Hints = SynergyRules.ForOffer(Plugin.Instance.Catalog.Links, hero, id, perk) });
     }
     [HideFromIl2Cpp]
     private Box ReadObstacle(Transform transform)

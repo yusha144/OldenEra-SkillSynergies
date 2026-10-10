@@ -7,11 +7,12 @@ internal sealed class SynergyCatalog
 {
     internal readonly Dictionary<string, SkillInfo> Infos = new(StringComparer.Ordinal);
     internal readonly List<Synergy> Links = new();
+    internal readonly Dictionary<string, List<string>> PerkParents = new(StringComparer.Ordinal);
     internal int SkippedConditions;
 
     internal void Load(string corePath)
     {
-        Infos.Clear(); Links.Clear(); SkippedConditions = 0;
+        Infos.Clear(); Links.Clear(); PerkParents.Clear(); SkippedConditions = 0;
         using var zip = ZipFile.OpenRead(corePath);
         var language = new Dictionary<string, string>();
         foreach (var entry in zip.Entries.Where(e => e.FullName.StartsWith("Lang/russian/texts/") && e.FullName.EndsWith(".json")))
@@ -27,9 +28,16 @@ internal sealed class SynergyCatalog
             var levels = row.GetProperty("parametersPerLevel").EnumerateArray().ToArray();
             if (levels.Length == 0) continue;
             string id = Text(row, "id");
-            Infos[id] = new SkillInfo { Id = id, Name = Local(Text(row, "name")), Icon = Text(levels[0], "icon") };
+            Infos[id] = new SkillInfo { Id = id, Name = Local(Text(row, "name")), Icon = Text(levels[0], "icon"),
+                LevelNames = levels.Select(level => Local(Text(level, "name"))).ToArray(),
+                LevelIcons = levels.Select(level => Text(level, "icon")).ToArray() };
             foreach (var level in levels)
-                foreach (var sid in Strings(level, "subSkills")) usedPerks.Add(sid);
+                foreach (var sid in Strings(level, "subSkills"))
+                {
+                    usedPerks.Add(sid);
+                    if (!PerkParents.TryGetValue(sid, out var parents)) PerkParents[sid] = parents = new List<string>();
+                    if (!parents.Contains(id)) parents.Add(id);
+                }
         }
         var actions = new Dictionary<string, JsonElement>();
         foreach (var actionRow in Rows(zip, "DB/hero_action_bonuses/")) actions[Text(actionRow, "id")] = actionRow;
@@ -54,7 +62,7 @@ internal sealed class SynergyCatalog
                         var required = conditions.Select(c => Strings(c, "parameters")[0]).Distinct().ToArray();
                         if (required.Any(sid => !Infos.TryGetValue(sid, out var info) || info.IsPerk)) { SkippedConditions++; continue; }
                         var link = new Synergy { PerkId = id, RequiredSkills = required,
-                            Effect = BonusText.Describe(action.GetProperty("bonuses"), description) };
+                            Effect = BonusText.Describe(action.GetProperty("bonuses"), description, row.GetProperty("bonuses")) };
                         if (!Links.Any(old => old.PerkId == id && old.RequiredSkills.SequenceEqual(required) && old.Effect == link.Effect)) Links.Add(link);
                     }
                 }
@@ -63,6 +71,13 @@ internal sealed class SynergyCatalog
     }
 
     internal SkillInfo Info(string id) => Infos.TryGetValue(id, out var info) ? info : new SkillInfo { Id = id, Name = id, Icon = "" };
+    internal string ParentOf(string perkId, HeroBuild hero)
+    {
+        if (!PerkParents.TryGetValue(perkId, out var parents)) return null;
+        if (hero.PerkParents.TryGetValue(perkId, out string parent) && parents.Contains(parent) && hero.Skills.Contains(parent)) return parent;
+        var learned = parents.Where(hero.Skills.Contains).ToArray();
+        return learned.Length == 1 ? learned[0] : null;
+    }
     internal static string Text(JsonElement row, string key) => row.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : "";
     internal static string[] Strings(JsonElement row, string key) => row.TryGetProperty(key, out var values) && values.ValueKind == JsonValueKind.Array
         ? values.EnumerateArray().Select(v => v.GetString() ?? "").ToArray() : Array.Empty<string>();

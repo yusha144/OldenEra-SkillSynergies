@@ -13,6 +13,7 @@ internal sealed class NativeUi
     internal readonly Image Frame;
     internal readonly TextMeshProUGUI Header, Body, Footer;
     private readonly TextMeshProUGUI _subtitle;
+    private readonly Image _headingRule;
     private readonly RectTransform _panel;
     private readonly RectTransform _rowViewport;
     private readonly TMP_FontAsset _font;
@@ -21,13 +22,14 @@ internal sealed class NativeUi
     private readonly List<RowView> _rows = new();
     private readonly Dictionary<string, Sprite> _sprites = new();
     private int _markCount;
+    private float _titleHeight, _subtitleHeight, _rowsOffset;
     private readonly Il2CppStructArray<Vector3> _corners = new(4);
     private sealed class RowView
     {
         internal RectTransform Root;
         internal Image Icon, Rule;
-        internal TextMeshProUGUI Name, Note;
-        internal float Height, NameHeight, NoteHeight;
+        internal TextMeshProUGUI Name, Note, Effect;
+        internal float Height, NameHeight, NoteHeight, EffectHeight, EffectOffset;
     }
 
     internal NativeUi(RectTransform parent, TextMeshProUGUI sample)
@@ -37,13 +39,16 @@ internal sealed class NativeUi
         Root.anchorMin = Vector2.zero; Root.anchorMax = Vector2.one; Root.offsetMin = Vector2.zero; Root.offsetMax = Vector2.zero;
         var group = Root.gameObject.AddComponent<CanvasGroup>(); group.blocksRaycasts = false; group.interactable = false;
         _panel = CreateRect("Combinations", Root);
-        Frame = _panel.gameObject.AddComponent<Image>(); Frame.color = new Color(0.58f, 0.47f, 0.26f, 0.98f); Frame.raycastTarget = false;
-        var inside = CreateRect("Background", _panel);
-        inside.anchorMin = Vector2.zero; inside.anchorMax = Vector2.one; inside.offsetMin = new Vector2(2, 2); inside.offsetMax = new Vector2(-2, -2);
-        var background = inside.gameObject.AddComponent<Image>(); background.color = new Color(0.055f, 0.063f, 0.10f, 0.98f); background.raycastTarget = false;
-        Header = CreateText("Heading", _panel); Header.fontStyle = FontStyles.Bold; Header.color = new Color(0.93f, 0.79f, 0.46f);
-        Body = CreateText("ChoiceName", _panel); Body.fontStyle = FontStyles.Bold;
-        _subtitle = CreateText("RelationDirection", _panel); _subtitle.color = new Color(0.72f, 0.73f, 0.7f);
+        Frame = _panel.gameObject.AddComponent<Image>(); Frame.color = new Color(0.045f, 0.07f, 0.11f, 1); Frame.raycastTarget = false;
+        var outline = Inset("BrassOutline", _panel, 1, new Color(0.54f, 0.48f, 0.33f, 1));
+        var background = Inset("BlueSlate", outline, 1, new Color(0.14f, 0.18f, 0.25f, 1));
+        var inner = Inset("InnerRule", background, 5, new Color(0.40f, 0.39f, 0.34f, 1));
+        Inset("ContentBackground", inner, 0.7f, new Color(0.14f, 0.18f, 0.25f, 1));
+        Header = CreateText("Heading", _panel); Header.color = new Color(0.86f, 0.75f, 0.48f);
+        Body = CreateText("ChoiceName", _panel);
+        _subtitle = CreateText("RelationDirection", _panel); _subtitle.color = new Color(0.75f, 0.77f, 0.77f);
+        _headingRule = CreateRect("HeadingRule", _panel).gameObject.AddComponent<Image>();
+        _headingRule.color = new Color(0.57f, 0.50f, 0.33f, 0.65f); _headingRule.raycastTarget = false;
         Footer = CreateText("Navigation", _panel); Footer.color = new Color(0.66f, 0.68f, 0.73f);
         _rowViewport = CreateRect("RelationsViewport", _panel);
         _rowViewport.gameObject.AddComponent<RectMask2D>();
@@ -57,49 +62,74 @@ internal sealed class NativeUi
     internal void Show(bool show) { if (Root) Root.gameObject.SetActive(show); }
     internal void Destroy() { if (Root) UnityEngine.Object.Destroy(Root.gameObject); }
 
-    internal void Panel(Box box, float scale, HintPanel content, ref int page)
+    internal float MeasureHeight(float width, float scale, HintPanel content)
     {
-        _panel.gameObject.SetActive(box.Valid);
-        if (!box.Valid) return;
-        Body.gameObject.SetActive(true); Footer.gameObject.SetActive(true); _subtitle.gameObject.SetActive(true);
-        Position(_panel, box);
+        Prepare(content, width - 32 * scale, scale);
+        float height = _rowsOffset + 36 * scale;
+        for (int i = 0; i < content.Rows.Count; i++) height += _rows[i].Height;
+        return height;
+    }
+
+    private void Prepare(HintPanel content, float width, float scale)
+    {
         float units = UnitsPerPixel(Root);
-        float x = box.X + 14 * scale, width = box.W - 28 * scale;
-        SetText(Header, "УСИЛЕНИЯ СЕЙЧАС", 16 * scale, units);
-        Position(Header.rectTransform, new Box(x, box.Y + 12 * scale, width, 23 * scale));
+        SetText(Header, "СОЧЕТАНИЯ", 13 * scale, units);
         SetText(Body, content.Title, 16 * scale, units);
-        float titleHeight = TextHeight(Body, width, units);
-        Position(Body.rectTransform, new Box(x, box.Y + 45 * scale, width, titleHeight));
         SetText(_subtitle, content.Subtitle, 12 * scale, units);
-        float subtitleY = box.Y + 45 * scale + titleHeight + 7 * scale;
-        float subtitleHeight = TextHeight(_subtitle, width, units);
-        Position(_subtitle.rectTransform, new Box(x, subtitleY, width, subtitleHeight));
-        float top = subtitleY + subtitleHeight + 15 * scale;
-        float available = Math.Max(32 * scale, box.Bottom - 40 * scale - top);
-        Position(_rowViewport, new Box(x, top, width, available));
-        var heights = new List<float>();
+        _titleHeight = TextHeight(Body, width, units);
+        _subtitleHeight = TextHeight(_subtitle, width, units);
+        _rowsOffset = 48 * scale + _titleHeight + _subtitleHeight;
         for (int i = 0; i < content.Rows.Count; i++)
         {
             if (i == _rows.Count) _rows.Add(CreateRow());
             var row = _rows[i]; var data = content.Rows[i];
-            row.Root.gameObject.SetActive(false);
-            float textWidth = width - 44 * scale;
-            SetText(row.Name, data.Name, 14 * scale, units);
+            SetText(row.Name, data.Name, 16 * scale, units);
             SetText(row.Note, data.Note, 12 * scale, units);
-            row.NameHeight = TextHeight(row.Name, textWidth, units);
-            row.NoteHeight = string.IsNullOrEmpty(data.Note) ? 0 : TextHeight(row.Note, textWidth, units) + 4 * scale;
-            row.Height = Math.Max(34 * scale, row.NameHeight + row.NoteHeight) + 14 * scale;
+            SetText(row.Effect, data.Effect, 14 * scale, units);
+            row.NameHeight = TextHeight(row.Name, width - 42 * scale, units);
+            row.NoteHeight = string.IsNullOrEmpty(data.Note) ? 0 : TextHeight(row.Note, width - 42 * scale, units);
+            row.EffectOffset = Math.Max(32 * scale, row.NameHeight + (row.NoteHeight > 0 ? row.NoteHeight + 4 * scale : 0)) + 8 * scale;
+            row.EffectHeight = string.IsNullOrEmpty(data.Effect) ? 0 : TextHeight(row.Effect, width, units);
+            row.Height = row.EffectOffset + row.EffectHeight + 12 * scale;
+            row.Icon.sprite = Sprite(data.Icon); row.Icon.enabled = row.Icon.sprite;
+        }
+    }
+
+    internal void Panel(Box box, float scale, HintPanel content, ref int page)
+    {
+        _panel.gameObject.SetActive(box.Valid);
+        if (!box.Valid) return;
+        Body.gameObject.SetActive(true); Footer.gameObject.SetActive(true); _subtitle.gameObject.SetActive(true); _headingRule.gameObject.SetActive(true);
+        Position(_panel, box);
+        float units = UnitsPerPixel(Root);
+        float x = box.X + 16 * scale, width = box.W - 32 * scale;
+        Prepare(content, width, scale);
+        Position(Header.rectTransform, new Box(x, box.Y + 12 * scale, width, 18 * scale));
+        Position(_headingRule.rectTransform, new Box(x, box.Y + 33 * scale, width, scale));
+        Position(Body.rectTransform, new Box(x, box.Y + 40 * scale, width, _titleHeight));
+        float subtitleY = box.Y + 44 * scale + _titleHeight;
+        Position(_subtitle.rectTransform, new Box(x, subtitleY, width, _subtitleHeight));
+        float top = box.Y + _rowsOffset + 8 * scale;
+        float available = Math.Max(32 * scale, box.Bottom - 28 * scale - top);
+        Position(_rowViewport, new Box(x, top, width, available));
+        var heights = new List<float>();
+        for (int i = 0; i < content.Rows.Count; i++)
+        {
+            var row = _rows[i]; var data = content.Rows[i];
+            row.Root.gameObject.SetActive(false);
             // Keep unusually long labels in one item instead of splitting a relation across pages.
             if (row.Height > available)
             {
-                float fit = Math.Min(1, (available - 14 * scale) / (row.NameHeight + row.NoteHeight));
-                SetText(row.Name, data.Name, 14 * scale * fit, units);
+                float fit = Math.Min(1, (available - 24 * scale) / (row.NameHeight + row.NoteHeight + row.EffectHeight));
+                SetText(row.Name, data.Name, 16 * scale * fit, units);
                 SetText(row.Note, data.Note, 12 * scale * fit, units);
-                row.NameHeight = TextHeight(row.Name, textWidth, units);
-                row.NoteHeight = string.IsNullOrEmpty(data.Note) ? 0 : TextHeight(row.Note, textWidth, units) + 4 * scale;
-                row.Height = Math.Max(34 * scale, row.NameHeight + row.NoteHeight) + 14 * scale;
+                SetText(row.Effect, data.Effect, 14 * scale * fit, units);
+                row.NameHeight = TextHeight(row.Name, width - 42 * scale, units);
+                row.NoteHeight = string.IsNullOrEmpty(data.Note) ? 0 : TextHeight(row.Note, width - 42 * scale, units);
+                row.EffectOffset = Math.Max(32 * scale, row.NameHeight + (row.NoteHeight > 0 ? row.NoteHeight + 4 * scale : 0)) + 8 * scale;
+                row.EffectHeight = string.IsNullOrEmpty(data.Effect) ? 0 : TextHeight(row.Effect, width, units);
+                row.Height = row.EffectOffset + row.EffectHeight + 12 * scale;
             }
-            row.Icon.sprite = Sprite(data.Icon); row.Icon.enabled = row.Icon.sprite;
             heights.Add(row.Height);
         }
         for (int i = content.Rows.Count; i < _rows.Count; i++) _rows[i].Root.gameObject.SetActive(false);
@@ -111,22 +141,24 @@ internal sealed class NativeUi
             var row = _rows[i]; row.Root.gameObject.SetActive(true);
             Position(row.Root, new Box(x, y, width, row.Height));
             Position(row.Icon.rectTransform, new Box(x, y, 32 * scale, 32 * scale));
-            Position(row.Name.rectTransform, new Box(x + 44 * scale, y, width - 44 * scale, row.NameHeight));
+            Position(row.Name.rectTransform, new Box(x + 42 * scale, y, width - 42 * scale, row.NameHeight));
             row.Note.gameObject.SetActive(row.NoteHeight > 0);
-            Position(row.Note.rectTransform, new Box(x + 44 * scale, y + row.NameHeight + 4 * scale, width - 44 * scale, row.NoteHeight));
+            Position(row.Note.rectTransform, new Box(x + 42 * scale, y + row.NameHeight + 4 * scale, width - 42 * scale, row.NoteHeight));
+            row.Effect.gameObject.SetActive(row.EffectHeight > 0);
+            Position(row.Effect.rectTransform, new Box(x, y + row.EffectOffset, width, row.EffectHeight));
             Position(row.Rule.rectTransform, new Box(x, y + row.Height - 7 * scale, width, scale));
             row.Rule.gameObject.SetActive(i < shown.Start + shown.Count - 1);
             y += row.Height;
         }
-        Position(Footer.rectTransform, new Box(x, box.Bottom - 25 * scale, width, 18 * scale));
-        SetText(Footer, pages.Count > 1 ? $"Страница {page}/{pages} · колёсико · F9 скрыть" : "Наведи на другой вариант · F9 скрыть", 10 * scale, units);
+        Position(Footer.rectTransform, new Box(x, box.Bottom - 23 * scale, width, 16 * scale));
+        SetText(Footer, pages.Count > 1 ? $"{page}/{pages.Count} · колёсико над панелью · F9 скрыть" : "F9 скрыть", 10 * scale, units);
     }
 
     internal void Status(Box box, float scale, string text)
     {
         _panel.gameObject.SetActive(box.Valid);
         if (!box.Valid) return;
-        Body.gameObject.SetActive(false); Footer.gameObject.SetActive(false); _subtitle.gameObject.SetActive(false);
+        Body.gameObject.SetActive(false); Footer.gameObject.SetActive(false); _subtitle.gameObject.SetActive(false); _headingRule.gameObject.SetActive(false);
         foreach (var row in _rows) row.Root.gameObject.SetActive(false);
         Position(_panel, box);
         Position(Header.rectTransform, new Box(box.X + 8 * scale, box.Y + 5 * scale, box.W - 16 * scale, box.H - 10 * scale));
@@ -152,10 +184,20 @@ internal sealed class NativeUi
     {
         var root = CreateRect("OwnedAbility", _rowViewport);
         var icon = CreateRect("Icon", root).gameObject.AddComponent<Image>(); icon.preserveAspect = true; icon.raycastTarget = false;
-        var name = CreateText("Name", root); name.fontStyle = FontStyles.Bold;
-        var note = CreateText("Relation", root); note.color = new Color(0.72f, 0.73f, 0.7f);
+        var name = CreateText("Name", root); name.color = new Color(0.91f, 0.80f, 0.56f);
+        var note = CreateText("Relation", root); note.color = new Color(0.75f, 0.77f, 0.77f);
+        var effect = CreateText("Effect", root);
         var rule = CreateRect("Rule", root).gameObject.AddComponent<Image>(); rule.raycastTarget = false; rule.color = new Color(0.58f, 0.47f, 0.26f, 0.3f);
-        return new RowView { Root = root, Icon = icon, Name = name, Note = note, Rule = rule };
+        return new RowView { Root = root, Icon = icon, Name = name, Note = note, Effect = effect, Rule = rule };
+    }
+
+    private static RectTransform Inset(string name, RectTransform parent, float inset, Color color)
+    {
+        var rect = CreateRect(name, parent);
+        rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one;
+        rect.offsetMin = new Vector2(inset, inset); rect.offsetMax = new Vector2(-inset, -inset);
+        var image = rect.gameObject.AddComponent<Image>(); image.color = color; image.raycastTarget = false;
+        return rect;
     }
 
     private static void SetText(TextMeshProUGUI label, string value, float pixels, float units)

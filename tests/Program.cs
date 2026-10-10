@@ -88,17 +88,64 @@ Check(arina.Hints.Count == 0, "Arina has no current synergy without other learne
 arenaHero.AddSkill("arena_skill_magic_night", 1);
 arina.Hints = SynergyRules.ForOffer(catalog.Links, arenaHero, arina.Id, true);
 Check(arina.Hints.Count == 1 && arina.Hints[0].Link.RequiredSkills.SequenceEqual(["arena_skill_magic_night"]), "Arina shows only the magic school actually learned");
-var detail = HintPresentation.Build([arina], arina, catalog);
-Check(detail.Rows.Count == 1 && detail.Rows[0].Name == "Магия ночи", "Detail identifies the owned skill strengthening this offered perk");
-Check(!detail.Rows.Any(r => r.Name.Contains("Арканная") || r.Note.Contains("+3")) && !detail.Subtitle.Contains("нужно"), "No future schools or repeated numeric explanations in the panel");
+var detail = HintPresentation.Build([arina], arina, catalog, arenaHero);
+Check(detail.Rows.Count == 1 && detail.Rows[0].Name == catalog.Info("arena_skill_magic_night").NameAt(1), "Detail identifies the owned skill and its current level strengthening this offered perk");
+Check(!detail.Rows.Any(r => r.Name.Contains("Арканная") || r.Effect.Contains("+3")) && !detail.Subtitle.Contains("нужно"), "No future schools or repeated numeric explanations on a perk's own card");
 Check(arenaHero.Perks.Count == 0 && arenaHero.Skills.Count == 2, "Presentation does not change the hero build");
 arenaHero.AddSkill("arena_skill_magic_space", 1);
 arina.Hints = SynergyRules.ForOffer(catalog.Links, arenaHero, arina.Id, true);
-Check(HintPresentation.Build([arina], arina, catalog).Rows.Count == 2, "Each currently learned related school is displayed once");
+Check(HintPresentation.Build([arina], arina, catalog, arenaHero).Rows.Count == 2, "Each currently learned related school is displayed once");
 var taxChoice = new ChoiceHint { Id = "skill_logistic", IsPerk = false, Hints = SynergyRules.ForOffer(catalog.Links, taxHero, "skill_logistic", false) };
-var taxPanel = HintPresentation.Build([taxChoice], taxChoice, catalog);
+var taxPanel = HintPresentation.Build([taxChoice], taxChoice, catalog, taxHero);
 Check(taxPanel.Subtitle == "Усилит ваши перки" && taxPanel.Rows.Single().Name == "Сборщик податей", "Reverse direction identifies the owned perk improved by an offered skill");
-Check(HintPresentation.Build([], null, catalog).Rows.Count == 0, "Overview cannot recommend skills that are not offered now");
+Check(taxPanel.Rows.Single().Effect == "+250 золота в день", "Owned perk details show the extra benefit absent from the offered main skill description");
+Check(HintPresentation.Build([], null, catalog, taxHero).Rows.Count == 0, "Overview cannot recommend skills that are not offered now");
+
+// Screenshot regression: Resoluteness belongs to advanced Leadership, while the offered
+// Battle Order activates its conditional bonus. The offered Expert Leadership is not owned yet.
+foreach (string prefix in new[] { "", "arena_", "campaign_" })
+{
+    var leader = new HeroBuild(); leader.AddSkill(prefix + "skill_leadership", 2);
+    leader.AddPerk(prefix + "sub_skill_leadership_1", 2, prefix + "skill_leadership");
+    var formation = new ChoiceHint { Id = prefix + "skill_formation", Level = 2,
+        Hints = SynergyRules.ForOffer(catalog.Links, leader, prefix + "skill_formation", false) };
+    var leadership = new ChoiceHint { Id = prefix + "skill_leadership", Level = 3,
+        Hints = SynergyRules.ForOffer(catalog.Links, leader, prefix + "skill_leadership", false) };
+    var shown = HintPresentation.Build([formation, leadership], formation, catalog, leader);
+    var row = shown.Rows.Single();
+    Check(row.Name == "Решимость" && row.Note == "Из навыка: Продвинутое лидерство", prefix + "Actual acquired parent skill level is shown");
+    Check(row.Effect.Contains("+1% → +2%") && row.Effect.Contains("за единицу боевого духа") && row.Effect.Contains("дружественных"), prefix + "Resoluteness retains exact before/after, target and per-morale restriction");
+    Check(shown.Title == catalog.Info(formation.Id).NameAt(2) && !shown.Title.Contains("лидерство"), prefix + "Activating offer is distinguished from the owned perk's parent");
+    Check(leadership.Hints.Count == 0 && leader.Level(prefix + "skill_leadership") == 2 && !leader.Skills.Contains(formation.Id), prefix + "Preview never acquires either offered skill or substitutes offered level for current level");
+    leader.AddSkill(formation.Id, 2);
+    Check(SynergyRules.ForOffer(catalog.Links, leader, formation.Id, false).Count == 0, prefix + "Existing Battle Order cannot promise another doubling");
+}
+var unrelated = new HeroBuild(); unrelated.AddSkill("arena_skill_leadership", 2);
+Check(catalog.ParentOf("sub_skill_leadership_1", unrelated) == null, "Parent lookup cannot cross game modes");
+var ambiguousCatalog = new SynergyCatalog(); ambiguousCatalog.PerkParents["p"] = ["a", "b"];
+var ambiguousHero = new HeroBuild(); ambiguousHero.AddSkill("a", 2); ambiguousHero.AddSkill("b", 1);
+Check(ambiguousCatalog.ParentOf("p", ambiguousHero) == null, "Ambiguous parent is not invented");
+ambiguousHero.AddPerk("p", 1, "b");
+Check(ambiguousCatalog.ParentOf("p", ambiguousHero) == "b", "Actual hero perk container disambiguates the source skill");
+using (var baseBonus = JsonDocument.Parse("[{\"type\":\"unitStat\",\"parameters\":[\"additionalActionChanceModifier\",\"0.01\"]}]"))
+using (var extraBonus = JsonDocument.Parse("[{\"type\":\"unitStat\",\"receiverAllegiance\":\"enemy\",\"parameters\":[\"additionalActionChanceModifier\",\"0.01\"]}]"))
+    Check(!BonusText.Describe(extraBonus.RootElement, "Бонус удваивается", baseBonus.RootElement).Contains("дружественных"), "Different target cannot inherit Resoluteness's allied summary");
+
+foreach (var size in new[] { (1790f,1227f), (1920f,1080f), (2560f,1440f), (1280f,720f) })
+{
+    float scale = Math.Clamp(size.Item2 / 1080, 0.75f, 2f);
+    var card = new Box(size.Item1 * .065f, size.Item2 * .35f, size.Item1 * .497f, size.Item2 * .18f);
+    var lower = new Box(card.X, card.Bottom + 20 * scale, card.W, card.H);
+    var anchor = PanelLayout.Group([card, lower]);
+    var compact = PanelLayout.Place(size.Item1, size.Item2, scale, [card, lower], anchor, _ => 220 * scale);
+    Check(compact.Valid && Math.Abs(compact.X - anchor.Right - 12 * scale) < .01f && compact.Y == anchor.Y,
+        "Sidebar hugs the choice group instead of the screen edge");
+    Check(compact.H == 220 * scale && compact.Right <= size.Item1 && compact.Bottom <= size.Item2,
+        "Short content produces a compact panel at every screen scale");
+    var moved = PanelLayout.Place(size.Item1, size.Item2, scale, [card, lower, compact], anchor, _ => 220 * scale);
+    Check(!moved.Valid || (!moved.Overlaps(card) && !moved.Overlaps(lower) && !moved.Overlaps(compact)),
+        "Anchoring still avoids another native button or panel");
+}
 
 var selection = new HintSelection();
 Check(selection.Observe("hero1-stage1", "a", ["a", "b"]) && selection.Id == "a", "Hover selects the inspected perk");
@@ -111,6 +158,7 @@ Check(selection.Observe("hero2-stage2", null, ["b"]) && selection.Id == "", "A c
 var rowPages = RowPagination.Split([70, 70, 70], 150);
 Check(rowPages.Count == 2 && rowPages[0].Start == 0 && rowPages[0].Count == 2 && rowPages[1].Start == 2 && rowPages[1].Count == 1, "Names and explanations stay together when paging");
 Check(RowPagination.Split([], 150).Single().Count == 0, "Empty result has a valid empty page");
+Check(RowPagination.Split([70.125f, 70.125f], 140.2499f).Count == 1, "Fractional screen scaling cannot create a spurious extra page in a measured panel");
 
 // Verify the catalog rejects unknown conditions instead of dropping them.
 string temporary = Path.Combine(Path.GetTempPath(), "synergy-test-" + Guid.NewGuid() + ".zip");
