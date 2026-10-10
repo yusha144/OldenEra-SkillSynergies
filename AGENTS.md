@@ -1,5 +1,6 @@
 # Skill Synergies — isolated mod
 
+- User-preserved stable baseline: 0.1.8 (2026-10-10), tag `stable/v0.1.8`, sibling directory/archive `OldenEra-SkillSynergies-STABLE-0.1.8`. Never modify/replace the frozen files or retag this baseline. Develop future versions here, retain all releases, and preserve the installed DLL/config before updating. See `STABLE-BASELINE.md`.
 - This is a separate plugin from Map Hints. Keep GUID `local.oldenera.skillsynergies`, DLL `OldenEra.SkillSynergies.dll`, config and installation directory separate.
 - Do not modify or reinstall Map Hints while working here.
 - Read existing game data and already-generated level-up choices only. Never simulate picks by calling game mutations, generate alternatives, consume randomness, apply bonuses or write saves.
