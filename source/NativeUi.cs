@@ -24,9 +24,9 @@ internal sealed class NativeUi
     private sealed class RowView
     {
         internal RectTransform Root;
-        internal Image Icon, Rule;
+        internal Image Icon, SourceIcon, Rule;
         internal TextMeshProUGUI Name, Note, Effect;
-        internal float Height, NameHeight, NoteHeight, EffectHeight, EffectOffset;
+        internal float Height, NameHeight, NoteHeight, NoteOffset, EffectHeight, EffectOffset;
     }
 
     internal NativeUi(RectTransform parent, TextMeshProUGUI sample, string name = "SkillSynergies.LocalHints")
@@ -79,7 +79,12 @@ internal sealed class NativeUi
             SetText(row.Effect, data.Effect, 19 * scale, units);
             row.NameHeight = TextHeight(row.Name, width - 50 * scale, units);
             row.NoteHeight = string.IsNullOrEmpty(data.Note) ? 0 : TextHeight(row.Note, width - 50 * scale, units);
-            row.EffectOffset = Math.Max(40 * scale, row.NameHeight + (row.NoteHeight > 0 ? row.NoteHeight + 4 * scale : 0)) + 8 * scale;
+            row.SourceIcon.sprite = Sprite(data.SourceIcon); row.SourceIcon.enabled = row.SourceIcon.sprite;
+            // Two distinct icon rows: the affected perk, then its acquired source skill.
+            // Keep the source below both the title and its icon, including wrapped names.
+            float headerHeight = Math.Max(40 * scale, row.NameHeight);
+            row.NoteOffset = headerHeight + 6 * scale;
+            row.EffectOffset = (row.NoteHeight > 0 ? row.NoteOffset + Math.Max(row.NoteHeight, row.SourceIcon.enabled ? 32 * scale : 0) : headerHeight) + 8 * scale;
             row.EffectHeight = string.IsNullOrEmpty(data.Effect) ? 0 : TextHeight(row.Effect, width, units);
             row.Height = row.EffectOffset + row.EffectHeight + 12 * scale;
             row.Icon.sprite = Sprite(data.Icon); row.Icon.enabled = row.Icon.sprite;
@@ -109,7 +114,10 @@ internal sealed class NativeUi
             Position(row.Icon.rectTransform, new Box(x, y, 40 * scale, 40 * scale));
             Position(row.Name.rectTransform, new Box(x + 50 * scale, y, width - 50 * scale, row.NameHeight));
             row.Note.gameObject.SetActive(row.NoteHeight > 0);
-            Position(row.Note.rectTransform, new Box(x + 50 * scale, y + row.NameHeight + 4 * scale, width - 50 * scale, row.NoteHeight));
+            row.SourceIcon.gameObject.SetActive(row.NoteHeight > 0 && row.SourceIcon.enabled);
+            Position(row.SourceIcon.rectTransform, new Box(x + 4 * scale, y + row.NoteOffset, 32 * scale, 32 * scale));
+            float noteInset = row.SourceIcon.enabled ? Math.Max(0, (32 * scale - row.NoteHeight) / 2) : 0;
+            Position(row.Note.rectTransform, new Box(x + 50 * scale, y + row.NoteOffset + noteInset, width - 50 * scale, row.NoteHeight));
             row.Effect.gameObject.SetActive(row.EffectHeight > 0);
             Position(row.Effect.rectTransform, new Box(x, y + row.EffectOffset, width, row.EffectHeight));
             Position(row.Rule.rectTransform, new Box(x, y + row.Height - 7 * scale, width, scale));
@@ -145,11 +153,12 @@ internal sealed class NativeUi
     {
         var root = CreateRect("OwnedAbility", _rowViewport);
         var icon = CreateRect("Icon", root).gameObject.AddComponent<Image>(); icon.preserveAspect = true; icon.raycastTarget = false;
+        var sourceIcon = CreateRect("SourceSkillIcon", root).gameObject.AddComponent<Image>(); sourceIcon.preserveAspect = true; sourceIcon.raycastTarget = false;
         var name = CreateText("Name", root); name.color = new Color(0.91f, 0.80f, 0.56f);
         var note = CreateText("Relation", root); note.color = new Color(0.75f, 0.77f, 0.77f);
         var effect = CreateText("Effect", root);
         var rule = CreateRect("Rule", root).gameObject.AddComponent<Image>(); rule.raycastTarget = false; rule.color = new Color(0.58f, 0.47f, 0.26f, 0.3f);
-        return new RowView { Root = root, Icon = icon, Name = name, Note = note, Effect = effect, Rule = rule };
+        return new RowView { Root = root, Icon = icon, SourceIcon = sourceIcon, Name = name, Note = note, Effect = effect, Rule = rule };
     }
 
     private static RectTransform Inset(string name, RectTransform parent, float inset, Color color)

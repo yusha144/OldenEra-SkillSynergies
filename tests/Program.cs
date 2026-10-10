@@ -97,6 +97,8 @@ arina.Hints = SynergyRules.ForOffer(catalog.Links, arenaHero, arina.Id, true);
 Check(arina.Hints.Count == 1 && arina.Hints[0].Link.RequiredSkills.SequenceEqual(["arena_skill_magic_night"]), "Arina shows only the magic school actually learned");
 var detail = HintPresentation.Build(arina, catalog, arenaHero);
 Check(detail.Rows.Count == 1 && detail.Rows[0].Name == catalog.Info("arena_skill_magic_night").NameAt(1), "Detail identifies the owned skill and its current level strengthening this offered perk");
+Check(detail.Rows[0].Icon == catalog.Info("arena_skill_magic_night").IconAt(1) && string.IsNullOrEmpty(detail.Rows[0].SourceIcon),
+    "An offered perk retains its supporting skill icon without duplicating it as another source icon");
 Check(!detail.Rows.Any(r => r.Name.Contains("Арканная")) && detail.Rows[0].Effect.Contains("с +6 до +9"), "Only current schools contribute and their exact numeric effect is shown");
 Check(arenaHero.Perks.Count == 0 && arenaHero.Skills.Count == 2, "Presentation does not change the hero build");
 arenaHero.AddSkill("arena_skill_magic_space", 1);
@@ -138,6 +140,9 @@ foreach (string prefix in new[] { "", "arena_", "campaign_" })
     var shown = HintPresentation.Build(formation, catalog, leader);
     var row = shown.Rows.Single();
     Check(row.Name == "Усилит ваш перк: Решимость" && row.Note == "Источник перка: Продвинутое лидерство", prefix + "Actual acquired parent skill level is distinguished from the activating choice");
+    Check(!string.IsNullOrEmpty(row.SourceIcon) && row.SourceIcon == catalog.Info(prefix + "skill_leadership").IconAt(2)
+        && row.Icon == catalog.Info(prefix + "sub_skill_leadership_1").Icon,
+        prefix + "Owned perk retains its own icon and gains a separate current-level parent icon, not the offered upgrade or activating skill");
     Check(row.Effect.Contains("с +1% до +2%") && row.Effect.Contains("за единицу боевого духа") && row.Effect.Contains("дружественных"), prefix + "Resoluteness retains exact before/after, target and per-morale restriction");
     Check(shown.ChoiceId == formation.Id && shown.Rows.All(r => r.Name != catalog.Info(formation.Id).NameAt(2)), prefix + "Activating offer is distinguished from the owned perk's parent");
     Check(leadership.Hints.Count == 0 && leader.Level(prefix + "skill_leadership") == 2 && !leader.Skills.Contains(formation.Id), prefix + "Preview never acquires either offered skill or substitutes offered level for current level");

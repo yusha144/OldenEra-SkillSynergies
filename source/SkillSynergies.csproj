@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>disable</Nullable><LangVersion>latest</LangVersion>
-    <AssemblyName>OldenEra.SkillSynergies</AssemblyName><Version>0.1.7</Version>
+    <AssemblyName>OldenEra.SkillSynergies</AssemblyName><Version>0.1.8</Version>
     <GameRoot Condition="'$(GameRoot)' == ''">E:\Steam_M2\steamapps\common\Heroes of Might and Magic Olden Era</GameRoot>
   </PropertyGroup>
   <ItemGroup>

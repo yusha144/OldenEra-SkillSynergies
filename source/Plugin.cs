@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 
 namespace OldenEra.SkillSynergies;
 
-[BepInPlugin("local.oldenera.skillsynergies", "Olden Era Skill Synergies", "0.1.7")]
+[BepInPlugin("local.oldenera.skillsynergies", "Olden Era Skill Synergies", "0.1.8")]
 public sealed class Plugin : BasePlugin
 {
     internal static Plugin Instance;
@@ -22,7 +22,7 @@ public sealed class Plugin : BasePlugin
             { Log.LogWarning("Skill Synergies disabled: unsupported game build (expected Steam 25672315)."); return; }
             Catalog.Load(Path.Combine(Paths.GameRootPath, "HeroesOldenEra_Data", "StreamingAssets", "Core.zip"));
             AddComponent<SynergyOverlay>();
-            Log.LogInfo($"Skill Synergies 0.1.7 loaded: {Catalog.Links.Count} numeric combinations, {Catalog.SkippedConditions} unsupported condition groups and {Catalog.SkippedEffects} unsupported effects skipped. Larger fixed text; individually clipped and scrollable choice annotations. Initial visibility={Enabled.Value}. F9 toggles hints inside skill selection, for this session only.");
+            Log.LogInfo($"Skill Synergies 0.1.8 loaded: {Catalog.Links.Count} numeric combinations, {Catalog.SkippedConditions} unsupported condition groups and {Catalog.SkippedEffects} unsupported effects skipped. Perk and source-skill icons; larger fixed text with individual scrolling. Initial visibility={Enabled.Value}. F9 toggles hints inside skill selection, for this session only.");
             if (Catalog.UnsupportedEffectPerks.Count > 0) Log.LogWarning("Unsupported perk effects: " + string.Join(", ", Catalog.UnsupportedEffectPerks));
         }
         catch (Exception error) { Log.LogError($"Skill Synergies could not start: {error}"); }
