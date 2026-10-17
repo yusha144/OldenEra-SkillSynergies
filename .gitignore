@@ -1,4 +1,15 @@
 **/bin/
 **/obj/
+/plugin/
+/releases/
+/work/
+/RESTORATION.json
+/.env
+/.env.*
+!/.env.example
+*.log
+*.user
+*.suo
+.vs/
 .vs/
 *.user

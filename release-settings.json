@@ -1,0 +1,19 @@
+{
+  "name": "OldenEra-SkillSynergies",
+  "mod": "SkillSynergies",
+  "repository": "Devourer22/OldenEra-SkillSynergies",
+  "project": "source/SkillSynergies.csproj",
+  "tests": "tests/Tests.csproj",
+  "steamBuild": "25672315",
+  "loader": "BepInEx Unity.IL2CPP win-x64 6.0.0-be.788",
+  "gameFiles": [
+    {
+      "path": "GameAssembly.dll",
+      "sha256": "D9972B0E7F7DD1C17758808E2F1B80E0A728946416D9A41DEAA99BAD744DE53A"
+    },
+    {
+      "path": "HeroesOldenEra_Data/il2cpp_data/Metadata/global-metadata.dat",
+      "sha256": "99117DC93F4B427967A2FCA49378E1B39B3202401B15234A98328FAA7D489817"
+    }
+  ]
+}
