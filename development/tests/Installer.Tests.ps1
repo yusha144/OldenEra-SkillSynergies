@@ -133,4 +133,62 @@ Reject { Save-VerifiedDownload $dep (Join-Path $staging 'bad.zip') } 'download c
 $dep.url = 'http://example.com/wrong.zip'
 Reject { Save-VerifiedDownload $dep (Join-Path $staging 'unsafe.zip') } 'unexpected dependency origin'
 Remove-Item Function:Invoke-WebRequest
+# Запускаем настоящие BAT в искусственных папках, без обращения к установленной игре.
+function Run-Launcher([string]$Path) {
+    $start = [Diagnostics.ProcessStartInfo]::new()
+    $start.FileName = $env:ComSpec
+    $start.Arguments = '/d /v:off /s /c ""' + $Path + '""'
+    $start.WorkingDirectory = $testRoot
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.RedirectStandardInput = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    $consoleEncoding = [Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage)
+    $start.StandardOutputEncoding = $consoleEncoding
+    $start.StandardErrorEncoding = $consoleEncoding
+    $process = [Diagnostics.Process]::Start($start)
+    try {
+        $outputTask = $process.StandardOutput.ReadToEndAsync()
+        $errorTask = $process.StandardError.ReadToEndAsync()
+        $process.StandardInput.WriteLine()
+        $process.StandardInput.Close()
+        if (!$process.WaitForExit(15000)) {
+            $process.Kill()
+            throw 'BAT не завершился за 15 секунд.'
+        }
+        return [pscustomobject]@{ExitCode=$process.ExitCode; Output=$outputTask.Result; Error=$errorTask.Result}
+    } finally {
+        $process.Dispose()
+    }
+}
+$sourceLaunchers = Join-Path $testRoot 'Яшины моды ! & (исходники)/OldenEra-SkillSynergies-main/installer'
+[IO.Directory]::CreateDirectory($sourceLaunchers) | Out-Null
+# Справка должна работать даже без остальных сценариев и файлов установщика.
+Copy-Item -LiteralPath (Join-Path $repo 'installer/Install.ps1') -Destination $sourceLaunchers
+foreach ($launcher in @('Install.bat', 'Uninstall.bat')) {
+    Copy-Item -LiteralPath (Join-Path $repo ('installer/' + $launcher)) -Destination $sourceLaunchers
+    $sourceResult = Run-Launcher (Join-Path $sourceLaunchers $launcher)
+    Check ($sourceResult.ExitCode -eq 1) ($launcher + ': исходники не запускают установку или удаление')
+    Check ($sourceResult.Output.Contains('Это архив исходников SkillSynergies.')) ($launcher + ': понятное сообщение на русском')
+    Check ($sourceResult.Output.Contains('https://github.com/yusha144/OldenEra-SkillSynergies/releases/latest')) ($launcher + ': ссылка на готовый выпуск')
+    Check ($sourceResult.Output.Contains('запустите ' + $launcher + ' из корня')) ($launcher + ': справка для выбранного действия')
+    Check ([string]::IsNullOrWhiteSpace($sourceResult.Error)) ($launcher + ': нет ошибки отсутствующего сценария')
+}
+# В готовом архиве выбирается сценарий из _files, сохраняются путь, действие и код завершения.
+$launcherPackage = Join-Path $testRoot 'Яшины моды ! & (установщик)'
+Put (Join-Path $launcherPackage '_files/Install.ps1') @'
+param([string]$PackageRoot, [switch]$Uninstall)
+Write-Host ('PackageRoot=' + [IO.Path]::GetFullPath($PackageRoot))
+Write-Host ('Uninstall=' + $Uninstall.IsPresent)
+exit 17
+'@
+Copy-Item -LiteralPath (Join-Path $repo 'installer/Install.ps1') -Destination $launcherPackage
+foreach ($launcher in @('Install.bat', 'Uninstall.bat')) {
+    Copy-Item -LiteralPath (Join-Path $repo ('installer/' + $launcher)) -Destination $launcherPackage
+    $packageResult = Run-Launcher (Join-Path $launcherPackage $launcher)
+    Check ($packageResult.ExitCode -eq 17) ($launcher + ': сохраняется код завершения установщика')
+    Check ($packageResult.Output.Contains('PackageRoot=' + $launcherPackage)) ($launcher + ': путь с кириллицей, пробелами и специальными символами')
+    Check ($packageResult.Output.Contains('Uninstall=' + ($launcher -eq 'Uninstall.bat'))) ($launcher + ': сохраняется действие')
+}
 Write-Host "Installer checks passed: $script:checks"

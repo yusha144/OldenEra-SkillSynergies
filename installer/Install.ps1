@@ -1,5 +1,15 @@
-﻿param([string]$PackageRoot, [string]$GamePath, [switch]$Uninstall, [switch]$RemoveSettings, [switch]$VerifyOnly, [switch]$NonInteractive)
+﻿param([string]$PackageRoot, [string]$GamePath, [switch]$Uninstall, [switch]$RemoveSettings, [switch]$VerifyOnly, [switch]$NonInteractive, [switch]$SourceArchive)
 $ErrorActionPreference = 'Stop'
+if ($SourceArchive) {
+    Write-Host 'Это архив исходников SkillSynergies.' -ForegroundColor Yellow
+    Write-Host 'Скачайте ZIP с названием OldenEra-SkillSynergies и номером версии из раздела Assets:'
+    Write-Host 'https://github.com/yusha144/OldenEra-SkillSynergies/releases/latest'
+    $launcher = 'Install.bat'
+    if ($Uninstall) { $launcher = 'Uninstall.bat' }
+    Write-Host ('Полностью распакуйте архив и запустите ' + $launcher + ' из корня, рядом с папкой _files.')
+    Write-Host 'Файлы игры не изменены.'
+    exit 1
+}
 $env:PSModulePath = $PSHOME + '\Modules;' + $env:PSModulePath
 Import-Module ($PSHOME + '\Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1') -ErrorAction Stop
 . (Join-Path $PSScriptRoot 'Installer.Core.ps1')

@@ -6,6 +6,8 @@
 
 [Скачать установщик 0.1.15](https://github.com/yusha144/OldenEra-SkillSynergies/releases/download/v0.1.15/OldenEra-SkillSynergies-0.1.15.zip) · [Все выпуски](https://github.com/yusha144/OldenEra-SkillSynergies/releases)
 
+Полностью распакуйте установочный архив и запустите `Install.bat` из корня, рядом с папкой `_files`. Кнопка `Code / Download ZIP` и ссылки `Source code` скачивают исходники для разработки.
+
 [Установка и удаление](docs/installation.md) · [Настройки](docs/settings.md) · [Обратная связь](docs/feedback.md)
 
 ## Что показывает мод
