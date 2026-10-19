@@ -1,0 +1,16 @@
+title: '[Пожелание] '
+body:
+  - type: textarea
+    id: situation
+    attributes:
+      label: В какой ситуации пригодится
+      description: Опишите задачу игрока или неудобство.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Что предлагаете
+      description: Как мод должен помогать в этой ситуации. Можно приложить снимок.
+    validations:
+      required: true

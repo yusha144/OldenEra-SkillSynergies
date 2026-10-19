@@ -19,14 +19,37 @@ internal sealed class NativeUi
     private readonly List<Image> _marks = new();
     private readonly List<RowView> _rows = new();
     private readonly Dictionary<string, Sprite> _sprites = new();
+    private readonly Dictionary<IntPtr, LabelMeasurements> _textMeasurements = new();
     private int _markCount;
     private readonly Il2CppStructArray<Vector3> _corners = new(4);
     private sealed class RowView
     {
         internal RectTransform Root;
-        internal Image Icon, SourceIcon, Rule;
-        internal TextMeshProUGUI Name, Note, Effect;
-        internal float Height, NameHeight, NoteHeight, NoteOffset, EffectHeight, EffectOffset;
+        internal Image Icon, Rule;
+        internal TextMeshProUGUI Name, Conditions, Effect;
+        internal float NameHeight, ConditionsHeight, EffectHeight;
+        internal HintRowLayout Layout;
+        internal readonly List<SourceView> Sources = new();
+        internal float Height => Layout.Height;
+    }
+    private sealed class SourceView
+    {
+        internal RectTransform Root;
+        internal TextMeshProUGUI Text;
+        internal readonly List<Image> Icons = new();
+        internal float TextHeight, Height, Inset;
+    }
+    private sealed class LabelMeasurements
+    {
+        internal string Text;
+        internal float FontSize;
+        internal readonly Dictionary<float, TextMeasurement> Widths = new();
+        internal TextMeasurement Current;
+    }
+    private sealed class TextMeasurement
+    {
+        internal Vector2 RectSize;
+        internal Bounds Ink;
     }
 
     internal NativeUi(RectTransform parent, TextMeshProUGUI sample, string name = "SkillSynergies.LocalHints")
@@ -75,22 +98,40 @@ internal sealed class NativeUi
             if (i == _rows.Count) _rows.Add(CreateRow());
             var row = _rows[i]; var data = content.Rows[i];
             SetText(row.Name, data.Name, 21 * scale, units);
-            SetText(row.Note, data.Note, 16 * scale, units);
-            // Only the numeric formatter can supply markup; game names/notes stay escaped.
+            SetText(row.Conditions, data.Conditions, 17 * scale, units);
+            // Presentation escapes all game text before adding numeric color markup.
             SetText(row.Effect, data.EffectRichText ?? data.Effect, 19 * scale, units, data.EffectRichText != null);
-            row.NameHeight = TextHeight(row.Name, width - 50 * scale, units);
-            row.NoteHeight = string.IsNullOrEmpty(data.Note) ? 0 : TextHeight(row.Note, width - 50 * scale, units);
-            row.SourceIcon.sprite = Sprite(data.SourceIcon); row.SourceIcon.enabled = row.SourceIcon.sprite;
-            // Two distinct icon rows: the affected perk, then its acquired source skill.
-            // Keep the source below both the title and its icon, including wrapped names.
-            float headerHeight = Math.Max(40 * scale, row.NameHeight);
-            row.NoteOffset = headerHeight + 6 * scale;
-            row.EffectOffset = (row.NoteHeight > 0 ? row.NoteOffset + Math.Max(row.NoteHeight, row.SourceIcon.enabled ? 32 * scale : 0) : row.NameHeight) + 4 * scale;
-            row.EffectHeight = string.IsNullOrEmpty(data.Effect) ? 0 : TextHeight(row.Effect, width - 50 * scale, units);
-            // The panel owns outer padding. Add a separator only BETWEEN relations;
-            // a single short explanation should not pay for both bottom paddings.
-            row.Height = Math.Max(40 * scale, row.EffectOffset + row.EffectHeight) + (i < content.Rows.Count - 1 ? 12 * scale : 0);
+            row.NameHeight = string.IsNullOrEmpty(data.Name) ? 0 : TextHeight(row.Name, width - 42 * scale, units);
+            row.ConditionsHeight = string.IsNullOrEmpty(data.Conditions) ? 0 : TextHeight(row.Conditions, width, units);
+            row.EffectHeight = TextHeight(row.Effect, width, units);
             row.Icon.sprite = Sprite(data.Icon); row.Icon.enabled = row.Icon.sprite;
+            var sourceHeights = new List<float>();
+            for (int j = 0; j < data.Sources.Count; j++)
+            {
+                if (j == row.Sources.Count) row.Sources.Add(CreateSource(row.Root));
+                var source = row.Sources[j]; var contentSource = data.Sources[j];
+                SetText(source.Text, contentSource.RichText ?? contentSource.Text, 16 * scale, units, contentSource.RichText != null);
+                for (int k = 0; k < contentSource.Icons.Length; k++)
+                {
+                    if (k == source.Icons.Count)
+                    {
+                        var icon = CreateRect("SkillIcon", source.Root).gameObject.AddComponent<Image>();
+                        icon.preserveAspect = true; icon.raycastTarget = false; source.Icons.Add(icon);
+                    }
+                    source.Icons[k].sprite = Sprite(contentSource.Icons[k]);
+                    source.Icons[k].enabled = source.Icons[k].sprite;
+                }
+                for (int k = 0; k < source.Icons.Count; k++) source.Icons[k].gameObject.SetActive(k < contentSource.Icons.Length);
+                // A joint requirement keeps all native identities. If there are many,
+                // stack their icons vertically instead of squeezing the source text.
+                source.Inset = 36 * scale;
+                source.TextHeight = TextHeight(source.Text, width - source.Inset, units);
+                source.Height = Math.Max(source.TextHeight, contentSource.Icons.Length * 28 * scale);
+                sourceHeights.Add(source.Height);
+            }
+            for (int j = data.Sources.Count; j < row.Sources.Count; j++) row.Sources[j].Root.gameObject.SetActive(false);
+            row.Layout = HintRowLayout.Measure(scale, row.NameHeight, row.EffectHeight, row.ConditionsHeight,
+                sourceHeights, i < content.Rows.Count - 1);
         }
     }
 
@@ -114,15 +155,22 @@ internal sealed class NativeUi
         {
             var row = _rows[i]; row.Root.gameObject.SetActive(true);
             Position(row.Root, new Box(x, y, width, row.Height));
-            Position(row.Icon.rectTransform, new Box(x, y, 40 * scale, 40 * scale));
-            Position(row.Name.rectTransform, new Box(x + 50 * scale, y, width - 50 * scale, row.NameHeight));
-            row.Note.gameObject.SetActive(row.NoteHeight > 0);
-            row.SourceIcon.gameObject.SetActive(row.NoteHeight > 0 && row.SourceIcon.enabled);
-            Position(row.SourceIcon.rectTransform, new Box(x + 4 * scale, y + row.NoteOffset, 32 * scale, 32 * scale));
-            float noteInset = row.SourceIcon.enabled ? Math.Max(0, (32 * scale - row.NoteHeight) / 2) : 0;
-            Position(row.Note.rectTransform, new Box(x + 50 * scale, y + row.NoteOffset + noteInset, width - 50 * scale, row.NoteHeight));
-            row.Effect.gameObject.SetActive(row.EffectHeight > 0);
-            Position(row.Effect.rectTransform, new Box(x + 50 * scale, y + row.EffectOffset, width - 50 * scale, row.EffectHeight));
+            row.Name.gameObject.SetActive(row.NameHeight > 0);
+            row.Icon.gameObject.SetActive(row.NameHeight > 0 && row.Icon.enabled);
+            Position(row.Icon.rectTransform, new Box(x, y, 32 * scale, 32 * scale));
+            if (row.NameHeight > 0) PositionText(row.Name, x + 42 * scale, y + Math.Max(0, (32 * scale - row.NameHeight) / 2));
+            PositionText(row.Effect, x, y + row.Layout.EffectOffset);
+            row.Conditions.gameObject.SetActive(row.ConditionsHeight > 0);
+            if (row.ConditionsHeight > 0) PositionText(row.Conditions, x, y + row.Layout.ConditionsOffset);
+            for (int j = 0; j < content.Rows[i].Sources.Count; j++)
+            {
+                var source = row.Sources[j]; source.Root.gameObject.SetActive(true);
+                float sourceY = y + row.Layout.SourceOffsets[j];
+                Position(source.Root, new Box(x, sourceY, width, source.Height));
+                PositionText(source.Text, x + source.Inset, sourceY + (source.Height - source.TextHeight) / 2);
+                for (int k = 0; k < content.Rows[i].Sources[j].Icons.Length; k++)
+                    Position(source.Icons[k].rectTransform, new Box(x + 4 * scale, sourceY + k * 28 * scale, 28 * scale, 28 * scale));
+            }
             Position(row.Rule.rectTransform, new Box(x, y + row.Height - 7 * scale, width, scale));
             row.Rule.gameObject.SetActive(i < content.Rows.Count - 1);
             y += row.Height;
@@ -156,12 +204,18 @@ internal sealed class NativeUi
     {
         var root = CreateRect("OwnedAbility", _rowViewport);
         var icon = CreateRect("Icon", root).gameObject.AddComponent<Image>(); icon.preserveAspect = true; icon.raycastTarget = false;
-        var sourceIcon = CreateRect("SourceSkillIcon", root).gameObject.AddComponent<Image>(); sourceIcon.preserveAspect = true; sourceIcon.raycastTarget = false;
         var name = CreateText("Name", root); name.color = new Color(0.91f, 0.80f, 0.56f);
-        var note = CreateText("Relation", root); note.color = new Color(0.75f, 0.77f, 0.77f);
+        var conditions = CreateText("Conditions", root); conditions.color = new Color(0.82f, 0.83f, 0.81f);
         var effect = CreateText("Effect", root);
         var rule = CreateRect("Rule", root).gameObject.AddComponent<Image>(); rule.raycastTarget = false; rule.color = new Color(0.58f, 0.47f, 0.26f, 0.3f);
-        return new RowView { Root = root, Icon = icon, SourceIcon = sourceIcon, Name = name, Note = note, Effect = effect, Rule = rule };
+        return new RowView { Root = root, Icon = icon, Name = name, Conditions = conditions, Effect = effect, Rule = rule };
+    }
+
+    private SourceView CreateSource(RectTransform parent)
+    {
+        var root = CreateRect("Source", parent);
+        var text = CreateText("Text", root); text.color = new Color(0.75f, 0.77f, 0.77f);
+        return new SourceView { Root = root, Text = text };
     }
 
     private static RectTransform Inset(string name, RectTransform parent, float inset, Color color)
@@ -175,14 +229,53 @@ internal sealed class NativeUi
 
     private static void SetText(TextMeshProUGUI label, string value, float pixels, float units, bool numericMarkup = false)
     {
-        label.fontSize = pixels * units;
+        if (label.fontSize != pixels * units) label.fontSize = pixels * units;
         // The native font's default line metrics are very tall; use an explicit compact line height.
         string lineHeight = (pixels * units * 1.25f).ToString("0.##", CultureInfo.InvariantCulture);
         string text = value ?? "";
-        label.text = "<line-height=" + lineHeight + ">" + (numericMarkup ? text : text.Replace("<", "‹").Replace(">", "›"));
+        string formatted = "<line-height=" + lineHeight + ">" + (numericMarkup ? text : text.Replace("<", "‹").Replace(">", "›"));
+        if (label.text != formatted) label.text = formatted;
     }
-    private static float TextHeight(TextMeshProUGUI label, float width, float units)
-        => Math.Max(label.fontSize * 1.3f, label.GetPreferredValues(label.text, width * units, float.PositiveInfinity).y) / units;
+    private float TextHeight(TextMeshProUGUI label, float width, float units)
+    {
+        if (!_textMeasurements.TryGetValue(label.Pointer, out var cache))
+            _textMeasurements[label.Pointer] = cache = new LabelMeasurements();
+        if (cache.Text != label.text || cache.FontSize != label.fontSize)
+        { cache.Widths.Clear(); cache.Text = label.text; cache.FontSize = label.fontSize; }
+        float localWidth = width * units;
+        if (!cache.Widths.TryGetValue(localWidth, out var measurement))
+        {
+            // Native font ascenders reserve considerably more room than the visible
+            // Cyrillic glyphs. Measure wrapped glyphs, preserving the native font size.
+            var size = new Vector2(localWidth, Math.Max(label.fontSize * 2,
+                label.GetPreferredValues(label.text, localWidth, float.PositiveInfinity).y));
+            label.rectTransform.sizeDelta = size;
+            label.ForceMeshUpdate(true, true);
+            var ink = label.textBounds;
+            bool validInk = float.IsFinite(ink.size.x + ink.size.y + ink.min.x + ink.max.y) && ink.size.y > 0;
+            if (!validInk)
+                ink = new Bounds(Vector3.zero, new Vector3(size.x, size.y, 0));
+            measurement = new TextMeasurement { RectSize = size, Ink = ink };
+            // Window animations can produce many transient widths. Bound the cache.
+            if (cache.Widths.Count >= 24) cache.Widths.Clear();
+            // A font still loading may not have a mesh yet. Retry next refresh.
+            if (validInk) cache.Widths[localWidth] = measurement;
+        }
+        label.rectTransform.sizeDelta = measurement.RectSize;
+        cache.Current = measurement;
+        return measurement.Ink.size.y / units;
+    }
+
+    private void PositionText(TextMeshProUGUI label, float x, float y)
+    {
+        var measurement = _textMeasurements[label.Pointer].Current;
+        var rect = label.rectTransform;
+        var parent = rect.parent.Cast<RectTransform>();
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, new Vector2(x, Screen.height - y), CameraFor(parent), out var point);
+        // Keep the measuring rect unchanged; align its visible glyphs rather than
+        // its large, invisible font margins. This also keeps the last line in view.
+        rect.anchoredPosition = point - parent.rect.center - new Vector2(measurement.Ink.min.x, measurement.Ink.max.y);
+    }
 
     private Sprite Sprite(string id)
     {
@@ -197,6 +290,7 @@ internal sealed class NativeUi
         var rect = CreateRect(name, parent); var text = rect.gameObject.AddComponent<TextMeshProUGUI>();
         text.font = _font; text.fontSharedMaterial = _fontMaterial; text.color = new Color(0.9f, 0.89f, 0.83f);
         text.richText = true; text.enableWordWrapping = true; text.alignment = TextAlignmentOptions.TopLeft;
+        text.overflowMode = TextOverflowModes.Overflow;
         text.enableAutoSizing = false; text.lineSpacing = 0; text.paragraphSpacing = 0;
         text.raycastTarget = false; text.margin = Vector4.zero; return text;
     }

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Пожелание к моду
+    url: https://github.com/yusha144/OldenEra-SkillSynergies/discussions/categories/ideas
+    about: Предложите новую возможность или улучшение.
+  - name: Замечания и впечатления
+    url: https://github.com/yusha144/OldenEra-SkillSynergies/discussions/categories/general
+    about: Расскажите, что удобно и что мешает.
+  - name: Вопрос по установке
+    url: https://github.com/yusha144/OldenEra-SkillSynergies/discussions/categories/q-a
+    about: Помощь с установкой, удалением и настройками.

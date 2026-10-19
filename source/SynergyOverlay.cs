@@ -1,4 +1,6 @@
 using Hex.Session.UI;
+using Hex.Session.Hud;
+using Hex.UI;
 using Il2CppInterop.Runtime.Attributes;
 using TMPro;
 using UnityEngine;
@@ -25,6 +27,7 @@ public sealed class SynergyOverlay : MonoBehaviour
     private readonly Il2CppSystem.Collections.Generic.List<BhLevelUpSkillView> _skills = new();
     private readonly Il2CppSystem.Collections.Generic.List<BhLevelUpSubSkillView> _perks = new();
     private readonly Il2CppSystem.Collections.Generic.List<Button> _buttons = new();
+    private readonly Il2CppSystem.Collections.Generic.List<Image> _images = new();
     private readonly List<ChoiceHint> _offers = new();
     private readonly HashSet<IntPtr> _choicePointers = new();
     private readonly List<Box> _obstacles = new();
@@ -175,21 +178,31 @@ public sealed class SynergyOverlay : MonoBehaviour
         foreach (var view in _skills)
         {
             if (!IsElementVisible(view)) continue;
-            Box bounds = ReadObstacle(view.transform);
+            Box bounds = ReadCard(view.transform);
             if (!_choicePointers.Contains(view.Pointer) || !view.isSelectable || view.cikp?.chrk == null || !bounds.Valid) continue;
             AddOffer(view.cikp.chrk.sid, false, bounds, hero, view.cikp.chrk.level);
         }
         foreach (var view in _perks)
         {
             if (!IsElementVisible(view)) continue;
-            Box bounds = ReadObstacle(view.transform);
+            Box bounds = ReadCard(view.transform);
             if (!_choicePointers.Contains(view.Pointer) || view.cikv?.chrv == null || !bounds.Valid || (view.empty && view.empty.activeInHierarchy)) continue;
             AddOffer(view.cikv.chrv.sid, true, bounds, hero);
         }
-        foreach (var button in _buttons) if (IsElementVisible(button)) ReadObstacle(button.transform);
+        foreach (var button in _buttons)
+        {
+            if (!IsElementVisible(button) || BelongsToCard(button.transform)) continue;
+            // Passive hints never intercept clicks. Avoid the visible control rather
+            // than an invisible hitbox extending beyond its card/window artwork.
+            var graphic = button.targetGraphic;
+            if (IsElementVisible(graphic) && graphic.color.a > .01f) ReadObstacle(graphic.transform);
+        }
         if (window.heroPortraitView) ReadObstacle(window.heroPortraitView.transform);
         if (window.heroDataView) ReadObstacle(window.heroDataView.transform);
         ReadObstacle(window.currentLevel.transform);
+        var frame = PanelLayout.WindowFrame(PanelLayout.Group(_offers.Select(o => o.Bounds)), VisibleImages(window.transform));
+        if (frame.Valid) _obstacles.Add(frame);
+        if (!window.cilk) ReadMapHud();
         if (_offers.Count == 0)
             Diagnostic($"Waiting for offered cards: skill views={_skills.Count}, perk views={_perks.Count}, arena={window.cilk}.");
         string context = data.id + ":" + (perkStage ? "perks:" : "skills:") + string.Join(",", _offers.Select(o => o.Id).OrderBy(id => id))
@@ -257,6 +270,81 @@ public sealed class SynergyOverlay : MonoBehaviour
         // Ignore full-screen canvas/animation holders, not actual card rectangles.
         if (bounds.Valid && !(bounds.W > Screen.width * 0.95f && bounds.H > Screen.height * 0.85f)) _obstacles.Add(bounds);
         return bounds;
+    }
+
+    [HideFromIl2Cpp]
+    private Box ReadCard(Transform transform)
+    {
+        var rect = transform.TryCast<RectTransform>();
+        var face = PanelLayout.CardFace(_ui.Bounds(rect), VisibleImages(transform));
+        if (face.Valid) _obstacles.Add(face);
+        return face;
+    }
+
+    [HideFromIl2Cpp]
+    private List<Box> VisibleImages(Transform root)
+    {
+        var result = new List<Box>();
+        if (!root || !root.gameObject.activeInHierarchy) return result;
+        _images.Clear(); root.GetComponentsInChildren<Image>(false, _images);
+        foreach (var image in _images)
+        {
+            if (!IsElementVisible(image) || image.color.a <= .01f || !image.sprite || image.transform.IsChildOf(_ui.Root)) continue;
+            var bounds = _ui.Bounds(image.rectTransform);
+            if (bounds.Valid && !(bounds.W > Screen.width * .95f && bounds.H > Screen.height * .85f)) result.Add(bounds);
+        }
+        return result;
+    }
+
+    [HideFromIl2Cpp]
+    private bool BelongsToCard(Transform transform)
+    {
+        foreach (var card in _skills)
+            if (card && (transform.IsChildOf(card.transform) || card.transform.IsChildOf(transform))) return true;
+        foreach (var card in _perks)
+            if (card && (transform.IsChildOf(card.transform) || card.transform.IsChildOf(transform))) return true;
+        return false;
+    }
+
+    [HideFromIl2Cpp]
+    private void ReadMapHud()
+    {
+        // Read the existing HUD screens only. Their canvas roots can cover the whole
+        // screen, so use the visible side-panel graphics instead of those holders.
+        var manager = cpo.ccog;
+        if (manager == null) return;
+        var visited = new HashSet<IntPtr>();
+        if (manager.ccoh != null) foreach (var pair in manager.ccoh) ReadHudScreen(pair.Value?.TryCast<BhScreen>(), visited);
+        if (manager.ccoi != null) foreach (var screen in manager.ccoi) ReadHudScreen(screen?.TryCast<BhScreen>(), visited);
+    }
+
+    // Keep this as an explicitly hidden method. A capturing local function creates
+    // an unannotated helper on SynergyOverlay that ClassInjector tries to export,
+    // including its unsupported managed closure, before Update can ever run.
+    [HideFromIl2Cpp]
+    private void ReadHudScreen(BhScreen screen, HashSet<IntPtr> visited)
+    {
+        if (!IsElementVisible(screen) || !visited.Add(screen.Pointer)) return;
+        var heroes = screen.TryCast<BhSideHeroesUISession>();
+        if (heroes?.heroesPanel) ReadHudRegion(heroes.heroesPanel.transform);
+        var cities = screen.TryCast<BhSideCitiesUISession>();
+        if (cities?.citiesPanel) ReadHudRegion(cities.citiesPanel.transform);
+        var hud = screen.TryCast<BhHUDSession>();
+        if (hud)
+        {
+            if (hud.dayPanelV2) ReadHudRegion(hud.dayPanelV2.transform);
+            if (hud.special) ReadHudRegion(hud.special.transform);
+            if (hud.factionPic) ReadHudRegion(hud.factionPic.transform);
+        }
+    }
+
+    [HideFromIl2Cpp]
+    private void ReadHudRegion(Transform transform)
+    {
+        var images = VisibleImages(transform);
+        var region = PanelLayout.Group(images);
+        if (region.Valid && region.W < Screen.width * .4f) _obstacles.Add(region);
+        else foreach (var image in images) if (image.W < Screen.width * .4f) _obstacles.Add(image);
     }
     public void OnDestroy() { ClearPanels(); _ui?.Destroy(); }
 }

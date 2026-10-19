@@ -5,6 +5,9 @@ using System.IO.Compression;
 int checks = 0;
 void Check(bool ok, string name) { if (!ok) throw new Exception(name); checks++; }
 string Direct(JsonElement extra, JsonElement baseline) => BonusText.Describe(BonusText.ReadChanges(extra, baseline, null, null, key => key));
+string pluginAssembly = args.Length > 1 ? args[1] : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
+    "../../../../../source/bin/Release/net6.0/OldenEra.SkillSynergies.dll"));
+InteropBoundaryChecks.Run(pluginAssembly, Check);
 // Window lookup regression: the legacy singleton is null in this game build.
 // Registry entries may include unopened windows or destroyed/stale cached objects.
 bool Visible(string window) => window == "standard-open" || window == "arena-open";
@@ -45,7 +48,7 @@ using (var json = JsonDocument.Parse("[{\"type\":\"unitStat\",\"receivers\":[\"a
     Check(Direct(json.RootElement, json.RootElement).Contains("аватара"), "Targeted units are not presented as a universal stat gain");
 
 // Integration with installed read-only game data; no game methods or saves are accessed.
-string core = args.Length > 0 ? args[0] : @"E:\Steam_M2\steamapps\common\Heroes of Might and Magic Olden Era\HeroesOldenEra_Data\StreamingAssets\Core.zip";
+string core = args.Length > 0 ? args[0] : throw new ArgumentException("Pass the path to HeroesOldenEra_Data/StreamingAssets/Core.zip.");
 var catalog = new SynergyCatalog(); catalog.Load(core);
 Check(catalog.Links.Count == 154 && catalog.SkippedEffects == 0, $"All 154 mode-specific relations have exact numeric effects; loaded {catalog.Links.Count}, skipped {catalog.SkippedEffects}: {string.Join(",", catalog.UnsupportedEffectPerks)}");
 Check(catalog.SkippedConditions == 0, "Current direct action conditions are supported");
@@ -96,16 +99,18 @@ arenaHero.AddSkill("arena_skill_magic_night", 1);
 arina.Hints = SynergyRules.ForOffer(catalog.Links, arenaHero, arina.Id, true);
 Check(arina.Hints.Count == 1 && arina.Hints[0].Link.RequiredSkills.SequenceEqual(["arena_skill_magic_night"]), "Arina shows only the magic school actually learned");
 var detail = HintPresentation.Build(arina, catalog, arenaHero);
-Check(detail.Rows.Count == 1 && detail.Rows[0].Name == catalog.Info("arena_skill_magic_night").NameAt(1), "Detail identifies the owned skill and its current level strengthening this offered perk");
-Check(detail.Rows[0].Icon == catalog.Info("arena_skill_magic_night").IconAt(1) && string.IsNullOrEmpty(detail.Rows[0].SourceIcon),
+Check(detail.Rows.Count == 1 && detail.Rows[0].Sources.Single().Text == catalog.Info("arena_skill_magic_night").NameAt(1), "Detail identifies the owned skill and its current level below the effect");
+Check(detail.Rows[0].Sources.Single().Icons.Single() == catalog.Info("arena_skill_magic_night").IconAt(1) && string.IsNullOrEmpty(detail.Rows[0].Icon),
     "An offered perk retains its supporting skill icon without duplicating it as another source icon");
-Check(!detail.Rows.Any(r => r.Name.Contains("Арканная")) && detail.Rows[0].Effect.Contains("с +6 до +9"), "Only current schools contribute and their exact numeric effect is shown");
+Check(!detail.Rows.SelectMany(r => r.Sources).Any(s => s.Text.Contains("Арканная")) && detail.Rows[0].Effect.Contains("с +6 до +9"), "Only current schools contribute and their exact numeric effect is shown");
 Check(arenaHero.Perks.Count == 0 && arenaHero.Skills.Count == 2, "Presentation does not change the hero build");
 arenaHero.AddSkill("arena_skill_magic_space", 1);
 arina.Hints = SynergyRules.ForOffer(catalog.Links, arenaHero, arina.Id, true);
-Check(HintPresentation.Build(arina, catalog, arenaHero).Rows.Count == 2, "Each currently learned related school is displayed once");
 var arinaTwoSchools = HintPresentation.Build(arina, catalog, arenaHero);
-Check(arinaTwoSchools.Rows.All(r => r.Effect == "ещё +3; всего +12"), "Two schools each contribute +3, with the combined perk bonus +12 shown instead of two misleading +9 totals");
+Check(arinaTwoSchools.Rows.Count == 1 && arinaTwoSchools.Rows[0].Sources.Count == 3, "One total has a base and both current contributions");
+Check(arinaTwoSchools.Rows[0].Effect == "Сила магии заклинаний дня: +12"
+    && arinaTwoSchools.Rows[0].Sources.Select(s => s.Text).SequenceEqual(new[] { "Бонус перка: +6", "Основы магии ночи: +3", "Основы арканной магии: +3" }),
+    "Two schools each contribute +3, with the combined perk bonus +12 shown once");
 var existingMage = new HeroBuild(); existingMage.AddSkill("arena_skill_magic_day", 3); existingMage.AddSkill("arena_skill_magic_night", 2);
 existingMage.AddPerk(arina.Id, 2, "arena_skill_magic_day");
 var newSchool = new ChoiceHint { Id = "arena_skill_magic_space", Level = 2, Hints = SynergyRules.ForOffer(catalog.Links, existingMage, "arena_skill_magic_space", false) };
@@ -113,22 +118,25 @@ Check(HintPresentation.Build(newSchool, catalog, existingMage).Rows.Single().Eff
 var nightHero = new HeroBuild(); nightHero.AddSkill("arena_skill_magic_night", 2);
 var cork = new ChoiceHint { Id = "arena_sub_skill_resistance_1", IsPerk = true, Hints = SynergyRules.ForOffer(catalog.Links, nightHero, "arena_sub_skill_resistance_1", true) };
 var corkPanel = HintPresentation.Build(cork, catalog, nightHero);
-Check(corkPanel.Rows.Count == 1 && corkPanel.Rows[0].Effect == "с +20% до +40%"
-    && corkPanel.Rows[0].EffectRichText == "с <color=#86C8EC>+20%</color> до <color=#86C8EC>+40%</color>",
-    "Cork keeps the exact mana-cost increase, colors only the numbers blue and does not repeat its native description");
+Check(corkPanel.Rows.Count == 1 && corkPanel.Rows[0].Effect == "Стоимость заклинаний ночи: с +20% до +40%"
+    && corkPanel.Rows[0].EffectRichText == "Стоимость заклинаний ночи: с <color=#86C8EC>+20%</color> до <color=#86C8EC>+40%</color>"
+    && corkPanel.Rows[0].Conditions == "Заклинания противника",
+    "Cork names the school and target, with only its mana-cost numbers blue");
 nightHero.AddSkill("arena_skill_magic_day", 1);
 cork.Hints = SynergyRules.ForOffer(catalog.Links, nightHero, cork.Id, true);
 corkPanel = HintPresentation.Build(cork, catalog, nightHero);
 Check(corkPanel.Rows.Count == 2 && corkPanel.Rows.All(r => r.Effect.Contains("с +20% до +40%")), "Independent school surcharges never stack into +60% on one school");
+Check(corkPanel.Rows.Select(r => r.Effect).Distinct().Count() == 2 && corkPanel.Rows.All(r => r.Sources.Count == 1),
+    "Equal amounts retain their distinct schools and matching sources");
 var corkOwner = new HeroBuild(); corkOwner.AddSkill("arena_skill_resistance", 2); corkOwner.AddPerk(cork.Id, 2, "arena_skill_resistance");
 var nightOffer = new ChoiceHint { Id = "arena_skill_magic_night", Level = 2, Hints = SynergyRules.ForOffer(catalog.Links, corkOwner, "arena_skill_magic_night", false) };
 Check(HintPresentation.Build(nightOffer, catalog, corkOwner).Rows.Single().Effect.Contains("с +20% до +40%"), "Cork also shows numeric effects in the reverse direction");
 var taxChoice = new ChoiceHint { Id = "skill_logistic", IsPerk = false, Hints = SynergyRules.ForOffer(catalog.Links, taxHero, "skill_logistic", false) };
 var taxPanel = HintPresentation.Build(taxChoice, catalog, taxHero);
 Check(taxPanel.Rows.Single().Name == "Усилит ваш перк: Сборщик податей", "Reverse direction explicitly identifies the owned perk improved by this choice");
-Check(taxPanel.Rows.Single().Effect == "с +250 до +500"
-    && taxPanel.Rows.Single().EffectRichText == "с <color=#E8C46A>+250</color> до <color=#E8C46A>+500</color>",
-    "Income uses coin-colored numbers without repeating the effect description");
+Check(taxPanel.Rows.Single().Effect == "Золото: с +250 до +500"
+    && taxPanel.Rows.Single().EffectRichText == "Золото: с <color=#E8C46A>+250</color> до <color=#E8C46A>+500</color>"
+    && taxPanel.Rows.Single().Conditions == "В день", "Income names the effect and separates timing from coin-colored numbers");
 Check(HintPresentation.ForChoices([], catalog, taxHero).Count == 0, "No offered choices means no annotations");
 
 // Screenshot regression: Resoluteness belongs to advanced Leadership, while the offered
@@ -143,12 +151,12 @@ foreach (string prefix in new[] { "", "arena_", "campaign_" })
         Hints = SynergyRules.ForOffer(catalog.Links, leader, prefix + "skill_leadership", false) };
     var shown = HintPresentation.Build(formation, catalog, leader);
     var row = shown.Rows.Single();
-    Check(row.Name == "Усилит ваш перк: Решимость" && row.Note == "Источник перка: Продвинутое лидерство", prefix + "Actual acquired parent skill level is distinguished from the activating choice");
-    Check(!string.IsNullOrEmpty(row.SourceIcon) && row.SourceIcon == catalog.Info(prefix + "skill_leadership").IconAt(2)
+    Check(row.Name == "Усилит ваш перк: Решимость" && row.Sources.Single().Text == "Источник перка: Продвинутое лидерство", prefix + "Actual acquired parent skill level is distinguished from the activating choice");
+    Check(row.Sources.Single().Icons.Single() == catalog.Info(prefix + "skill_leadership").IconAt(2)
         && row.Icon == catalog.Info(prefix + "sub_skill_leadership_1").Icon,
         prefix + "Owned perk retains its own icon and gains a separate current-level parent icon, not the offered upgrade or activating skill");
-    Check(row.Effect == "с +1% до +2%" && row.EffectRichText == row.Effect,
-        prefix + "Resoluteness shows only its coefficient change in the neutral color; the native card explains morale");
+    Check(row.Effect == "Шанс доп. хода союзников: с +1% до +2%" && row.EffectRichText == row.Effect
+        && row.Conditions == "За 1 ед. боевого духа", prefix + "Resoluteness keeps the neutral values and the morale coefficient on a separate line");
     Check(shown.ChoiceId == formation.Id && shown.Rows.All(r => r.Name != catalog.Info(formation.Id).NameAt(2)), prefix + "Activating offer is distinguished from the owned perk's parent");
     Check(leadership.Hints.Count == 0 && leader.Level(prefix + "skill_leadership") == 2 && !leader.Skills.Contains(formation.Id), prefix + "Preview never acquires either offered skill or substitutes offered level for current level");
     leader.AddSkill(formation.Id, 2);
@@ -177,7 +185,7 @@ foreach (string prefix in new[] { "", "arena_", "campaign_" })
     Check(healingPanel.ChoiceId == summonerId && healingPanel.Anchor.Y == summon.Bounds.Y,
         prefix + "Screenshot annotation belongs to the activating Summoning card, not its owned Arcane source");
     Check(healingPanel.Rows.Single().Name == "Усилит ваш перк: Всякая жизнь бесконечна"
-        && healingPanel.Rows.Single().Note == "Источник перка: Продвинутая арканная магия",
+        && healingPanel.Rows.Single().Sources.Single().Text == "Источник перка: Продвинутая арканная магия",
         prefix + "Screenshot wording distinguishes the upgraded perk from its current source skill");
     var healingBox = PanelLayout.PlaceCards(1521, 1195, 1195f / 1080, [summon.Bounds, arcane.Bounds], [healingPanel.Anchor],
         (_, _) => 240, [summon.Bounds, arcane.Bounds]).Single();
@@ -195,10 +203,11 @@ var screenshotHero = new HeroBuild(); screenshotHero.AddSkill("skill_summoner", 
 var screenshotChoice = new ChoiceHint { Id = "sub_skill_magic_space_2", IsPerk = true, Bounds = new Box(123, 815, 852, 160),
     Hints = SynergyRules.ForOffer(catalog.Links, screenshotHero, "sub_skill_magic_space_2", true) };
 var screenshotRow = HintPresentation.Build(screenshotChoice, catalog, screenshotHero).Rows.Single();
-Check(screenshotRow.Name == "Основы призыва аватара" && !string.IsNullOrEmpty(screenshotRow.Icon)
-    && screenshotRow.Effect == "с +30% до +60%"
-    && screenshotRow.EffectRichText == "с <color=#8FD69A>+30%</color> до <color=#8FD69A>+60%</color>",
-    "Local-map healing hint keeps the source name/icon and a single green numeric comparison without the duplicated description");
+Check(screenshotRow.Sources.Single().Text == "Основы призыва аватара" && !string.IsNullOrEmpty(screenshotRow.Sources.Single().Icons.Single())
+    && screenshotRow.Effect == "Лечение и воскрешение: с +30% до +60%"
+    && screenshotRow.EffectRichText == "Лечение и воскрешение: с <color=#8FD69A>+30%</color> до <color=#8FD69A>+60%</color>"
+    && screenshotRow.Conditions == "В бою\nЗаклинания героя и способности союзников",
+    "Equal healing shares one comparison, keeping combat and both targets above its source");
 var screenshotRows = new[] { new Box(123,637,852,160), screenshotChoice.Bounds, new Box(123,993,852,160) };
 var screenshotBox = PanelLayout.PlaceCards(1644, 1196, 1196f / 1080, screenshotRows, [screenshotChoice.Bounds],
     (_, _) => 230, screenshotRows).Single();
@@ -218,14 +227,11 @@ foreach (bool differentScope in new[] { false, true })
     if (differentScope) spellChange.Part.Suffix += " на своей территории"; else spellChange.Added = .1m;
     var link = new Synergy { PerkId = "healing-scope", RequiredSkills = ["skill_summoner"], Changes = separated };
     var hint = new SynergyHint { Link = link };
-    string text = BonusText.Preview([hint], [hint], [link], screenshotHero, true, compact: true);
-    Check(text.Contains("способностями союзников") && text.Contains("заклинаниями героя")
-        && (differentScope ? text.Contains("на своей территории") : text.Contains("с +30% до +40%")),
-        "Detailed calculations retain different healing amounts and territories");
-    var numeric = BonusText.NumericPreview([hint], [hint], [link], screenshotHero, true);
-    Check(numeric.Text.Split('\n').Length == (differentScope ? 1 : 2)
-        && numeric.Text.Contains("с +30% до +60%") && (differentScope || numeric.Text.Contains("с +30% до +40%")),
-        "The numeric UI omits repeated scope prose, merges equal values and preserves distinct values");
+    var rows = HintPresentation.Build(new ChoiceHint { Id = link.PerkId, IsPerk = true, Hints = [hint] }, catalog, screenshotHero).Rows;
+    Check(rows.Count == 2 && rows.Any(r => r.Effect.Contains("способностями союзников"))
+        && rows.Any(r => r.Effect.Contains("заклинаниями героя")), "Distinct healing scopes or amounts cannot collapse into a shared effect");
+    Check(differentScope ? rows.Any(r => r.Conditions.Contains("на своей территории")) : rows.Any(r => r.Effect.Contains("с +30% до +40%")),
+        "The visible UI retains the distinguishing territory or amount");
 }
 
 var ambiguousCatalog = new SynergyCatalog(); ambiguousCatalog.PerkParents["p"] = ["a", "b"];
@@ -251,7 +257,7 @@ var annotations = HintPresentation.ForChoices([oneForAll, noCombination, allForO
 Check(annotations.Count == 2 && annotations.Any(p => p.ChoiceId == oneForAll.Id) && annotations.Any(p => p.ChoiceId == allForOne.Id), "All relevant offers are immediately visible without a hovered choice");
 Check(HintPresentation.Build(noCombination, catalog, tacticsHero) == null && HintPresentation.ForChoices([noCombination], catalog, tacticsHero).Count == 0,
     "No combination means no panel, not an empty-state message");
-Check(annotations[0].Rows.Single().Name == "Продвинутое нападение" && annotations[0].Rows.Single().Effect.Contains("с +2 до +4"),
+Check(annotations[0].Rows.Single().Sources.Single().Text == "Продвинутое нападение" && annotations[0].Rows.Single().Effect.Contains("с +2 до +4"),
     "One for All shows its supporting skill and numbers without repeating its own title");
 Check(annotations[0].Anchor.Y == oneForAll.Bounds.Y && annotations[1].Anchor.Y == allForOne.Bounds.Y,
     "Each annotation retains its specific card's position");
@@ -303,7 +309,7 @@ Check(!PanelLayout.PlaceCards(1280,720,1,[],[new Box(100,690,600,30)],(_,_)=>150
 var insetCard = new Box(100,300,700,180);
 var extendedButton = new Box(100,100,730,600);
 var beyondFrame = PanelLayout.PlaceCards(1280,800,1,[insetCard,extendedButton],[insetCard],(_,_)=>130)[0];
-Check(beyondFrame.Valid && beyondFrame.Y == insetCard.Y && beyondFrame.X == extendedButton.Right + 12,
+Check(beyondFrame.Valid && beyondFrame.Y == insetCard.Y && beyondFrame.X == extendedButton.Right + 8,
     "Native hitbox extending beyond a card shifts the annotation slightly right instead of hiding it");
 var unmatchedBelow = new Box(100,500,700,180);
 var expandedAnnotation = PanelLayout.PlaceCards(1280,800,1,[insetCard,unmatchedBelow],[insetCard],(_,_)=>350,[insetCard,unmatchedBelow])[0];
@@ -311,7 +317,7 @@ Check(expandedAnnotation.Valid && expandedAnnotation.Y == insetCard.Y && expande
     && !expandedAnnotation.Overlaps(unmatchedBelow),
     "A single annotation uses empty adjacent space without moving its top away from the activating choice");
 var matchedBelow = PanelLayout.PlaceCards(1280,800,1,[insetCard,unmatchedBelow],[insetCard,unmatchedBelow],(_,_)=>350);
-Check(matchedBelow.All(b => b.Valid) && matchedBelow[0].Bottom <= matchedBelow[1].Y - 12,
+Check(matchedBelow.All(b => b.Valid) && matchedBelow[0].Bottom <= matchedBelow[1].Y - 8,
     "A later matching choice still reserves its own space when its neighbour grows");
 var controlBelow = new Box(810, 550, 460, 90);
 var stoppedByControl = PanelLayout.PlaceCards(1280,800,1,[insetCard,controlBelow],[insetCard],(_,_)=>350)[0];
@@ -319,6 +325,45 @@ Check(stoppedByControl.Valid && stoppedByControl.Y == insetCard.Y && stoppedByCo
     "Expansion stops before a native control, retaining a usable fallback viewport");
 Check(!PanelLayout.PlaceCards(1280,800,1,[insetCard,new Box(800,280,480,80)],[insetCard],(_,_)=>100)[0].Valid,
     "Blocked card-height space cannot push the explanation lower beside a different native choice");
+
+// October 18 screenshots: visible perk faces are inset into oversized hitboxes.
+// The ordinary map also has a right HUD absent from the arena.
+foreach (float ratio in new[] { .625f, .9375f, 1f, 1.25f })
+{
+    float width = 2048 * ratio, height = 1152 * ratio, scale = Math.Clamp(height / 1080, .75f, 2f);
+    Box Shot(float x, float y, float w, float h) => new(x * ratio, y * ratio, w * ratio, h * ratio);
+    var nativeFaces = new[] { Shot(719, 635, 668, 127), Shot(719, 779, 668, 127), Shot(719, 920, 668, 127) };
+    var hitbox = Shot(700, 629, 754, 147);
+    var face = PanelLayout.CardFace(hitbox, new[] { Shot(730, 646, 42, 42), Shot(711, 627, 688, 143), nativeFaces[0] });
+    Check(face.X == nativeFaces[0].X && face.Y == nativeFaces[0].Y && face.Right == nativeFaces[0].Right,
+        "A visible card background, not its icon, glow or hitbox, anchors the panel");
+    Check(PanelLayout.CardFace(hitbox, []).Right == hitbox.Right, "Missing card artwork safely retains the native bounds");
+    var frame = Shot(686, 176, 736, 893);
+    var chosenFrame = PanelLayout.WindowFrame(PanelLayout.Group(nativeFaces), new[] { Shot(0, 0, 2048, 1152), frame, nativeFaces[0] });
+    Check(chosenFrame.Right == frame.Right, "Only an enclosing window frame defines the adjacent edge, not a full-screen holder");
+    var sidebar = Shot(1845, 0, 203, 1152);
+    float Measure(int index, float w) => (w >= 370 * scale ? 108 : 132) * scale;
+    var ordinary = PanelLayout.PlaceCards(width, height, scale, nativeFaces.Concat(new[] { frame, sidebar }).ToArray(),
+        [face], Measure, nativeFaces)[0];
+    Check(ordinary.Valid && ordinary.Y == face.Y && Math.Abs(ordinary.X - frame.Right - 8 * scale) < .1f
+        && ordinary.Right <= sidebar.X - 4 * scale + .1f && !ordinary.Overlaps(frame),
+        $"Ordinary-game panel hugs its visible window, aligns to its perk and fits before the right sidebar: ratio={ratio}, panel={ordinary.X},{ordinary.Y},{ordinary.W},{ordinary.H}, frameRight={frame.Right}, sidebarX={sidebar.X}");
+    Check(ordinary.H <= 132 * scale, "A short ordinary-game hint does not acquire an oversized viewport");
+    var arenaFaces = new[] { Shot(698, 425, 708, 180), Shot(698, 635, 708, 174), Shot(698, 844, 708, 177) };
+    var arenaFrame = Shot(687, 155, 734, 892);
+    var arena = PanelLayout.PlaceCards(width, height, scale, arenaFaces.Append(arenaFrame).ToArray(), [arenaFaces[1]],
+        (_, _) => 130 * scale, arenaFaces)[0];
+    Check(arena.Valid && arena.Y == arenaFaces[1].Y && Math.Abs(arena.X - arenaFrame.Right - 8 * scale) < .1f,
+        "Arena retains the same visible-card alignment and narrow window gap");
+    var arenaPerks = new[] { Shot(719, 614, 668, 127), Shot(719, 755, 668, 127), Shot(719, 900, 668, 127) };
+    var allMatched = PanelLayout.PlaceCards(width, height, scale, arenaPerks.Append(arenaFrame).ToArray(), arenaPerks,
+        (_, _) => 230 * scale, arenaPerks);
+    Check(allMatched.All(b => b.Valid) && allMatched.Select((b, i) => b.Y == arenaPerks[i].Y
+        && allMatched.Where((_, j) => i != j).All(other => !b.Overlaps(other))).All(ok => ok),
+        "Several long arena hints remain beside their own cards with independent clipped viewports");
+}
+var compactGlyphLayout = HintRowLayout.Measure(1, 0, 40, 17, [28], false);
+Check(compactGlyphLayout.Height + 16 <= 127, "A two-line effect, condition and icon source fit the ordinary perk height at unchanged font sizes");
 
 // Large text is contained in each card's own scrolling viewport. It is never
 // squeezed to fit, even when all three short perk cards have lengthy bonuses.
@@ -360,6 +405,85 @@ Check(scroll.Offset == 0 && !scroll.Overflow, "A now-fitting annotation clears i
 scroll.SetRange(140.25f, 140.2499f);
 Check(!scroll.Overflow, "Fractional measurement differences do not create a spurious scrollbar");
 Check(new HintScroll().Offset == 0, "A new choice starts at the beginning of its explanation");
+
+// Combined-support coverage: every real perk with ALL its current requirements.
+// This catches accidental grouping across schools, scopes or source combinations.
+foreach (var group in catalog.Links.GroupBy(l => l.PerkId))
+{
+    var allSkills = new HeroBuild();
+    foreach (var id in group.SelectMany(l => l.RequiredSkills).Distinct()) allSkills.AddSkill(id, 1);
+    var choice = new ChoiceHint { Id = group.Key, IsPerk = true, Hints = SynergyRules.ForOffer(catalog.Links, allSkills, group.Key, true) };
+    var values = BonusPreview.Calculate(choice.Hints, catalog.Links, allSkills, true);
+    Check(values.Count == group.SelectMany(l => l.Changes).Select(c => c.Part.Key).Distinct().Count()
+        && HintPresentation.Build(choice, catalog, allSkills).Rows.All(r => r.Sources.Count > 0),
+        "All simultaneously active supported effects remain representable: " + group.Key);
+}
+HintPanel FullPerk(string id)
+{
+    var build = new HeroBuild();
+    foreach (var skill in catalog.Links.Where(l => l.PerkId == id).SelectMany(l => l.RequiredSkills).Distinct()) build.AddSkill(skill, 1);
+    return HintPresentation.Build(new ChoiceHint { Id = id, IsPerk = true,
+        Hints = SynergyRules.ForOffer(catalog.Links, build, id, true) }, catalog, build);
+}
+Check(FullPerk("sub_skill_logistic_4").Rows.Single().Effect == "Стоимость нейтральных походных заклинаний (мана): с -4 до -8",
+    "The complete neutral adventure-spell set remains one compact effect with its unit");
+Check(FullPerk("sub_skill_summoner_1").Rows.Single().Effect == "Урон аватара: с +40% до +80%",
+    "Avatar variants share their verified effect without adding it three times");
+Check(FullPerk("sub_skill_trainer_5").Rows.Count == 2 && FullPerk("sub_skill_trainer_5").Rows.Select(r => r.Conditions).SequenceEqual(new[] {
+    "Союзники 1-3-го рангов\nОт атаки героя", "Союзники 1-3-го рангов\nОт защиты героя" }),
+    "Rank-specific effects retain their restriction without three identical rows per effect: "
+        + string.Join("; ", FullPerk("sub_skill_trainer_5").Rows.Select(r => r.Effect + " / " + r.Conditions)));
+Check(FullPerk("sub_skill_formation_4").Rows.Single().Conditions.Contains("кроме первого"), "Round exclusions stay visible");
+Check(FullPerk("sub_skill_battlemage_5").Rows.Single().Conditions == "От знаний героя", "Stat-derived percentages retain their coefficient");
+Check(FullPerk("sub_skill_summoner_2").Rows.Single().Effect == "Здоровье аватара: с 4 до 5"
+    && FullPerk("arena_sub_skill_summoner_2").Rows.Single().Effect == "Здоровье аватара: до 5", "Absolute overrides never acquire a fictional baseline or additive contribution");
+Check(FullPerk("arena_sub_skill_magic_night_2").Rows.Single().Effect == "Макс. здоровье врагов: с -1 до -2", "Negative enemy health retains its target and signs");
+var existingMageRow = HintPresentation.Build(newSchool, catalog, existingMage).Rows.Single();
+Check(existingMageRow.Sources.Any(s => s.Text == "Продвинутая магия ночи: +3")
+    && existingMageRow.Sources.Any(s => s.Text.EndsWith(": +3 (после выбора)"))
+    && existingMageRow.Sources.Last().Text == "Источник перка: Экспертная магия дня",
+    "Owned multi-source perk distinguishes the existing and newly activated contributions, followed by its actual parent");
+
+var jointCatalog = new SynergyCatalog();
+jointCatalog.Infos["a"] = new SkillInfo { Id = "a", Name = "Навык <b>А</b>", Icon = "a-icon" };
+jointCatalog.Infos["b"] = new SkillInfo { Id = "b", Name = "Навык Б", Icon = "b-icon" };
+jointCatalog.Infos["c"] = new SkillInfo { Id = "c", Name = "Навык В", Icon = "c-icon" };
+var jointPart = new BonusPart { Key = "heroStat||||spellPower", Attribute = "Сила магии <b>тест</b>", Value = 3 };
+var joint = new Synergy { PerkId = "joint", RequiredSkills = ["a", "b"], Changes = [new BonusChange { Part = jointPart, Base = 6, Added = 3 }] };
+var independent = new Synergy { PerkId = "joint", RequiredSkills = ["c"], Changes = [new BonusChange { Part = jointPart, Base = 6, Added = 3 }] };
+jointCatalog.Links.AddRange([joint, independent]);
+var jointHero = new HeroBuild(); foreach (string id in new[] { "a", "b", "c" }) jointHero.AddSkill(id, 1);
+var jointChoice = new ChoiceHint { Id = "joint", IsPerk = true, Hints = SynergyRules.ForOffer(jointCatalog.Links, jointHero, "joint", true) };
+var jointRow = HintPresentation.Build(jointChoice, jointCatalog, jointHero).Rows.Single();
+Check(jointRow.Effect.EndsWith(": +12") && jointRow.Sources.Count == 3
+    && jointRow.Sources[1].Text == "Навык <b>А</b> + Навык Б: +3" && jointRow.Sources[1].Icons.SequenceEqual(new[] { "a-icon", "b-icon" }),
+    "A joint requirement contributes once while keeping both skill identities");
+Check(!jointRow.EffectRichText.Contains("<b>") && !jointRow.Sources[1].RichText.Contains("<b>"),
+    "Dynamic game text cannot inject markup into the generated effect or contribution colors");
+jointChoice.Hints.Add(jointChoice.Hints[0]);
+Check(HintPresentation.Build(jointChoice, jointCatalog, jointHero).Rows.Single().Effect.EndsWith(": +12"),
+    "Duplicate references to the same rule cannot double the combined bonus");
+var otherPerk = new Synergy { PerkId = "other", RequiredSkills = ["c"], Changes = independent.Changes };
+jointCatalog.Links.Add(otherPerk); jointHero.AddPerk("joint", 1); jointHero.AddPerk("other", 2); jointHero.Skills.Remove("c");
+var twoPerks = HintPresentation.Build(new ChoiceHint { Id = "c", Level = 1,
+    Hints = SynergyRules.ForOffer(jointCatalog.Links, jointHero, "c", false) }, jointCatalog, jointHero);
+Check(twoPerks.Rows.Count == 2 && twoPerks.Rows[0].Effect.Contains("с +9 до +12") && twoPerks.Rows[1].Effect.Contains("с +6 до +9")
+    && twoPerks.Rows[0].Sources.Last().Text == "Временный перк", "Different owned perks never share totals, and temporary status survives the new source layout");
+
+// Use the exact row layout consumed by NativeUi with measured wrapped text sizes.
+foreach (float scale in new[] { .75f, 1f, 1.333333f, 2f })
+    foreach (float titleHeight in new[] { 0, 28, 84 })
+    {
+        float effectHeight = 52 * scale, conditionsHeight = 66 * scale;
+        float[] sourceHeights = [32 * scale, 64 * scale, 90 * scale];
+        var layout = HintRowLayout.Measure(scale, titleHeight * scale, effectHeight, conditionsHeight, sourceHeights, false);
+        Check(layout.EffectOffset >= titleHeight * scale && layout.ConditionsOffset >= layout.EffectOffset + effectHeight
+            && layout.SourceOffsets[0] >= layout.ConditionsOffset + conditionsHeight,
+            "Wrapped title, effect and all conditions finish before any source begins");
+        Check(layout.SourceOffsets[1] >= layout.SourceOffsets[0] + sourceHeights[0]
+            && layout.SourceOffsets[2] >= layout.SourceOffsets[1] + sourceHeights[1]
+            && layout.Height == layout.SourceOffsets[2] + sourceHeights[2], "Long contributions remain disjoint and reachable by scrolling without extra bottom padding");
+    }
 
 // Verify the catalog rejects unknown conditions instead of dropping them.
 string temporary = Path.Combine(Path.GetTempPath(), "synergy-test-" + Guid.NewGuid() + ".zip");

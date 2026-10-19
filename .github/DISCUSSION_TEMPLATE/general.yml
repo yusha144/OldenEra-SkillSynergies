@@ -1,0 +1,14 @@
+title: '[Замечание] '
+body:
+  - type: textarea
+    id: feedback
+    attributes:
+      label: Замечание или впечатление
+      description: Что удобно, непонятно или мешает? Укажите версию мода и ситуацию на карте.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Пример или снимок
+      description: Если речь о неверной подсказке или сбое, удобнее заполнить форму ошибки в Issues.

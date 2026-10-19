@@ -1,24 +1,45 @@
-# Skill Synergies — isolated mod
+# Правила Skill Synergies
 
-- Distribution update 0.1.11: the user explicitly requested author yusha144, common configurable hotkeys and a combined installer for all three mods. This authorizes the coordinated packaging work despite older task-specific isolation instructions below; keep the DLLs/configs independently usable and frozen releases untouched. Toggle via `HotkeySettings` and `yusha144.hotkeys.cfg` (F9 default), never a hardcoded key. Shared config is read once at startup and existing comments/other keys must survive.
+## Границы проекта
 
-- User-preserved stable baseline: 0.1.8 (2026-10-10), tag `stable/v0.1.8`, sibling directory/archive `OldenEra-SkillSynergies-STABLE-0.1.8`. Never modify/replace the frozen files or retag this baseline. Develop future versions here, retain all releases, and preserve the installed DLL/config before updating. See `STABLE-BASELINE.md`.
-- This is a separate plugin from Map Hints. Keep GUID `local.oldenera.skillsynergies`, DLL `OldenEra.SkillSynergies.dll`, config and installation directory separate.
-- Do not modify or reinstall Map Hints while working here.
-- Read existing game data and already-generated level-up choices only. Never simulate picks by calling game mutations, generate alternatives, consume randomness, apply bonuses or write saves.
-- Use native UI children of the level-up window; all mod graphics have raycastTarget=false and the root CanvasGroup must not block raycasts.
-- Match raw skill IDs exactly across standard, arena and campaign data. Use only active HeroSubSkill statuses (1 temporary, 2 permanent); offered/inactive entries do not count as acquired perks.
-- Base synergy detection on referenced HeroLearnedSkill conditions, not loose text matching or obsolete translations. Skip complete condition groups when any condition is unsupported.
-- Show only combinations activated by currently offered choices and the hero's already acquired abilities. Do not suggest future missing skills. Owned perks and upgrades that do not newly satisfy presence conditions are not new improvements.
-- Show verified numeric effects in BOTH directions: an offered skill improving an owned perk and an offered perk strengthened by existing skills. For an owned perk show its parent skill at the hero's CURRENT level. Do not substitute the offered next level. Distinguish the activating choice from the parent skill.
-- Preserve both visual identities: an owned perk keeps its icon beside its name, and its source skill has a separate native icon beside `Источник перка`, using the acquired level. For an offered perk the supporting acquired skill already has its icon; do not duplicate it. Icons scroll and clip together with their own row, and never intercept clicks.
-- Resolve amounts from actual bonus parameters and referenced passive buffs, preserving target, territory, trigger, rank and coefficient restrictions in calculations. Never infer a doubling from localized prose. Include already active synergies in before/after values, and combine multiple current supports without double-counting. Treat absolute stat overrides separately from additive bonuses. Reject unrecognized effect shapes with a diagnostic rather than displaying a vague description placeholder.
-- The user explicitly requested numbers-only effects in 0.1.10: source name/icon, then `с +30% до +60%`. Do not repeat the native perk's description, targets or conditions in the annotation. Merge identical numeric/color comparisons, retain distinct changes on separate lines. Color only values using structured stat IDs: health/healing green, gold/resources gold, mana blue; use neutral text for other stats. Keep signs, percentages, existing synergy totals, separate contributions (`ещё +3; всего +12`) and absolute overrides without inventing an unknown baseline (`до 5`). Names and source notes remain escaped; only generated numeric/color markup is trusted.
-- Use the words `с ... до ...` for numeric comparisons: the native font lacks the arrow glyph. Do not display a hotkey footer. F9 still toggles the UI, but no status panel remains when hidden.
-- Render a separate annotation automatically for EVERY currently offered choice with an active combination. Never require hovering to reveal it. An unmatched choice produces no annotation; when none match, hide the entire mod UI without empty-state or waiting messages.
-- Anchor each annotation at its own card's height, preferably on its right. Avoid native controls and other annotations; reserve room for later eligible cards. Do not repeat the offered ability name, a general panel title or a redundant direction subtitle. Only show acquired partners, the perk source where relevant, and numerical effects.
-- The user confirmed that annotations belong beside the CHOICE ACTIVATING the improvement, not the source skill of the owned perk. For a skill offer prefix the owned perk name with `Усилит ваш перк: ` and its parent note with `Источник перка: `. Example: Endless Life is an Arcane perk, but its healing doubles from learning Summoning; upgrading already learned Arcane does not activate it. Keep exact card-height alignment, trying another width/side or hiding details rather than moving down around an obstruction.
-- Use the native card font, slate-blue background and a single thin brass frame; no inset frame. Text is larger (21/19/16 scaled pixels for name/numbers/source) and must NEVER shrink to fit a short card. Prefer numbers-only effects and panels sized to their content. Align numbers under the name, with the supporting skill icon alongside the compact two-line block. Avoid double bottom padding and use available width/height. Keep each panel's top at the activating card; reserve later MATCHING annotations, but allow growth into empty adjacent space beside unmatched choices. Stop expansion before native controls. Multiple panels must not overlap or displace each other. Keep native RectMask2D and independent wheel scrolling only as a fallback when content still cannot fit; show the passive scrollbar only then. Preserve scroll offset on refresh and reset it with new hero/choices/stage; pointer movement never switches content. Keep markers inside their own card. Hide details with no adjacent space, retaining the mark and a log diagnostic without an extra status panel.
-- Test pure logic against the installed Core.zip, build against the verified game's interop assemblies, back up any previous installed Synergies DLL/config before updates.
-- User owns in-game testing. Do not start, close, or control their game.
-- In user reports describe the behavior checked and distinguish pure layout/data checks from in-game visual testing. Do not present the total assertion counter as a count of separate gameplay tests.
+- Это отдельный мод. GUID: `local.oldenera.skillsynergies`, DLL: `OldenEra.SkillSynergies.dll`, папка установки: `BepInEx/plugins/SkillSynergies`.
+- Не изменять и не переустанавливать другие моды при работе над Skill Synergies.
+- Сохранённая версия 0.1.8, тег `stable/v0.1.8` и соседние архив и папка `OldenEra-SkillSynergies-STABLE-0.1.8` неизменяемы. Существующие выпуски и теги сохраняются.
+- Перед изменением установленной DLL сохранять её и настройки. Не запускать, не закрывать и не управлять игрой пользователя.
+- Коммиты и документация оформляются по [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md). Использовать Conventional Commits и русское описание.
+
+## Данные и расчёты
+
+- Читать существующие игровые данные и уже сформированные варианты выбора. Не вызывать игровые методы выбора, применения бонусов, генерации вариантов, случайности или записи сохранений.
+- Сопоставлять исходные идентификаторы навыков точно, включая обычные, ареновые и кампанийные данные. Активными считаются только статусы HeroSubSkill 1 и 2; предложенные и неактивные перки не считаются изученными.
+- Определять сочетания по ссылкам HeroLearnedSkill, а не по переведённому тексту. При неизвестном условии пропускать всю группу.
+- Показывать сочетания текущего предложения с приобретёнными способностями. Уже имеющийся перк и повышение уровня известного навыка не активируют повторно условие наличия.
+- Проверять оба направления: предложенный навык усиливает изученный перк; предложенный перк усиливается изученными навыками. Источник изученного перка показывается на текущем уровне героя, а не предлагаемом следующем.
+- Значения брать из параметров бонусов и связанных пассивных эффектов. Сохранять цель, территорию, событие, ранг и коэффициенты. Не выводить удвоение из описания.
+- Учитывать уже действующие усиления. Совместное условие нескольких навыков даёт один вклад. Абсолютные замены характеристик отделять от сложения. Для неизвестной базы не придумывать сравнение.
+- Разные школы, цели и условия не объединять из-за одинаковых чисел. Лечение заклинаниями и способностями объединяется только при совпадении условий, чисел и источников.
+- Неизвестную форму эффекта пропускать с записью в журнал, без расплывчатой текстовой замены.
+
+## Подсказки
+
+- Подсказка располагается у варианта, который активирует усиление. Она появляется автоматически для каждого подходящего предложения; наведение для появления не требуется.
+- Без подходящих сочетаний скрывать весь интерфейс мода. Не добавлять пустые панели, сообщения ожидания и постоянную подпись клавиши.
+- Для предложенного навыка показывать имя изученного перка с его значком и строку источника с отдельным значком текущего уровня. Для предложенного перка показывать значок усиливающего навыка без дубля.
+- Сначала короткое название эффекта и числа, затем отдельный блок условий и источники. Несколько источников одного эффекта показываются общим итогом с базой и вкладами. Новый вклад помечается после выбора.
+- Цвет назначается числам по идентификатору характеристики: здоровье и лечение зелёные, золото и ресурсы золотистые, мана голубая. Имена и текст экранируются; разметка разрешена только для сформированных чисел.
+- Для сравнения использовать `с ... до ...`: игровой шрифт не содержит символа стрелки.
+- Использовать шрифт карточки, сине-серый фон и одну тонкую рамку. Размеры текста: 21/19/17/16 масштабируемых пикселей для имени перка, эффекта, условий и источника; значки 32/28 для перка и источника.
+- Не уменьшать шрифт ради размещения. Измерять видимые буквы, сокращать пустые поля. Учитывать видимую рамку окна, соседние подсказки и элементы карты, а не невидимые области кнопок.
+- Верх подсказки совпадает с карточкой. Пробовать другую ширину или сторону, сохраняя выравнивание. Расширять панель в свободное место рядом с неподходящими вариантами, резервируя место для подходящих.
+- Длинные панели используют RectMask2D и независимую прокрутку колёсиком с индикатором только при переполнении. Прокрутка сохраняется при обновлении и сбрасывается при смене героя, вариантов или этапа. Движение курсора не меняет содержимое.
+- Если рядом нет места, оставить отметку на карточке и запись в журнал без дополнительной панели состояния.
+- Все элементы имеют raycastTarget=false; CanvasGroup не блокирует нажатия. Значки прокручиваются и обрезаются вместе со своей строкой.
+
+## Настройки и проверки
+
+- Общие клавиши читаются один раз через HotkeySettings из OldenEra.hotkeys.cfg, при его отсутствии из yusha144.hotkeys.cfg. Существующие комментарии и записи других модов сохраняются. По умолчанию используется F9 только внутри выбора навыков.
+- Авторство указывается одной строкой в README и обязательным уведомлением в LICENSE; не добавлять его в метаданные DLL, журнал или комментарии настроек.
+- Все вспомогательные методы SynergyOverlay имеют HideFromIl2Cpp. Атрибут внешнего метода не распространяется на методы, сгенерированные компилятором для локальных функций.
+- Проверять метаданные именно собранной DLL через development/tests/InteropBoundaryChecks.cs. Открыты только Update и OnDestroy. Эта проверка обнаруживает ошибку регистрации из версии 0.1.14.
+- Проверять расчёты на установленном Core.zip, собирать с библиотеками проверенной версии игры. Порядок команд находится в [руководстве разработчика](development/README.md).
+- Отделять проверки данных, расчётов, размещения и метаданных от визуальной проверки в игре. Счётчик утверждений не является количеством игровых сценариев.

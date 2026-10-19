@@ -3,6 +3,7 @@
 /plugin/
 /releases/
 /work/
+/development/artifacts/
 /RESTORATION.json
 /.env
 /.env.*
@@ -11,5 +12,3 @@
 *.user
 *.suo
 .vs/
-.vs/
-*.user

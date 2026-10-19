@@ -1,0 +1,9 @@
+title: '[Вопрос] '
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Вопрос
+      description: Укажите версию мода, Steam build и что уже пробовали. При ошибке установщика приложите её текст.
+    validations:
+      required: true

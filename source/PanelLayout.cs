@@ -14,13 +14,33 @@ internal readonly struct Box
 
 internal static class PanelLayout
 {
+    internal static Box CardFace(Box layout, IEnumerable<Box> images)
+    {
+        if (!layout.Valid) return default;
+        // Select a card-sized visible background, excluding icons and enlarged
+        // glow/click holders. Keep the original rectangle when none is available.
+        var faces = images.Where(b => b.Valid && b.W >= layout.W * .75f && b.H >= layout.H * .5f
+            && b.W <= layout.W * 1.05f && b.H <= layout.H * 1.05f
+            && b.Contains(layout.X + layout.W / 2, layout.Y + layout.H / 2)).ToArray();
+        return faces.Length == 0 ? layout : faces.OrderBy(b => b.W * b.H).First();
+    }
+
+    internal static Box WindowFrame(Box choices, IEnumerable<Box> images)
+    {
+        if (!choices.Valid) return default;
+        var frames = images.Where(b => b.Valid && b.X <= choices.X && b.Y <= choices.Y
+            && b.Right >= choices.Right && b.Bottom >= choices.Bottom
+            && b.W <= choices.W * 1.25f).ToArray();
+        return frames.Length == 0 ? default : frames.OrderBy(b => b.W * b.H).First();
+    }
+
     internal static Box[] PlaceCards(float width, float height, float scale, IReadOnlyList<Box> obstacles,
         IReadOnlyList<Box> anchors, Func<int, float, float> measureHeight, IReadOnlyList<Box> choiceRows = null)
     {
         var placed = new Box[anchors.Count];
         var occupied = new List<Box>();
         Box group = Group(choiceRows ?? anchors);
-        float gap = 12 * scale, margin = 8 * scale;
+        float gap = 8 * scale, margin = 8 * scale;
         // Keep the top at the activating card. Empty neighbouring annotation rows may
         // provide height, but every later matching choice reserves its own space.
         foreach (int index in Enumerable.Range(0, anchors.Count).OrderBy(i => anchors[i].Y).ThenBy(i => anchors[i].X))
@@ -34,17 +54,27 @@ internal static class PanelLayout
             if (bottom - top < 96 * scale) continue;
             Box best = default; float bestScore = float.PositiveInfinity;
             var measurements = new Dictionary<float, float>();
-            foreach (float rawWidth in new[] { 420f, 500f, 580f, 340f, 300f, 260f })
+            foreach (float rawWidth in new[] { 380f, 420f, 340f, 300f, 260f, 500f, 580f })
                 foreach (bool right in new[] { true, false })
                 {
                     // Native button hitboxes and window ornaments can extend past a card.
                     // Stay at its height, moving just beyond that obstruction when necessary.
                     var edges = new HashSet<float> { right ? anchor.Right : anchor.X, right ? group.Right : group.X };
                     foreach (var ob in obstacles)
-                        if (ob.Valid && (right ? ob.Right >= anchor.Right : ob.X <= anchor.X)) edges.Add(right ? ob.Right : ob.X);
+                        if (ob.Valid && (right ? ob.Right >= anchor.Right && ob.Right <= Math.Max(anchor.Right, group.Right) + 80 * scale
+                            : ob.X <= anchor.X && ob.X >= Math.Min(anchor.X, group.X) - 80 * scale)) edges.Add(right ? ob.Right : ob.X);
                     foreach (float edge in edges)
                     {
                         float free = right ? width - margin - edge - gap : edge - gap - margin;
+                        // Fit the corridor before a side HUD instead of rejecting every
+                        // standard width that crosses it. Never jump past that HUD.
+                        foreach (var obstacle in obstacles)
+                        {
+                            var blocked = obstacle.Expand(4 * scale);
+                            if (!obstacle.Valid || blocked.Y > top || blocked.Bottom <= top) continue;
+                            if (right && blocked.X >= edge + gap) free = Math.Min(free, blocked.X - edge - gap);
+                            if (!right && blocked.Right <= edge - gap) free = Math.Min(free, edge - gap - blocked.Right);
+                        }
                         float w = Math.Min(rawWidth * scale, free);
                         if (w < 260 * scale) continue;
                         float x = right ? edge + gap : edge - gap - w;
@@ -66,7 +96,7 @@ internal static class PanelLayout
                         if (obstacles.Any(o => o.Expand(4 * scale).Overlaps(candidate)) || occupied.Any(o => o.Expand(6 * scale).Overlaps(candidate))) continue;
                         float distance = right ? Math.Abs(x - anchor.Right) : Math.Abs(candidate.Right - anchor.X);
                         float score = distance + 10 * (desired - h)
-                            + .1f * Math.Abs(w - 420 * scale) + (right ? 0 : scale);
+                            + .1f * Math.Abs(w - 380 * scale) + .3f * desired + (right ? 0 : 24 * scale);
                         if (score < bestScore) { best = candidate; bestScore = score; }
                     }
                 }

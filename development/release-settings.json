@@ -1,0 +1,34 @@
+{
+  "name": "OldenEra-SkillSynergies",
+  "mod": "SkillSynergies",
+  "repository": "yusha144/OldenEra-SkillSynergies",
+  "project": "source/SkillSynergies.csproj",
+  "tests": "development/tests/Tests.csproj",
+  "steamBuild": "25672315",
+  "loader": "BepInEx Unity.IL2CPP win-x64 6.0.0-be.788",
+  "downloads": [
+    {
+      "id": "bepinex-788",
+      "kind": "Archive",
+      "url": "https://builds.bepinex.dev/projects/bepinex_be/788/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.788%2B5b766a3.zip",
+      "sha256": "F4CC496BD098A0DF4164B81E3737297707F13A47C2478DBA2F60EEFAB784817A"
+    },
+    {
+      "id": "unity-6000.0.66",
+      "kind": "File",
+      "url": "https://unity.bepinex.dev/libraries/6000.0.66.zip",
+      "path": "BepInEx/unity-libs/6000.0.66.zip",
+      "sha256": "9FA885ECE698DCD65CFB1989643B72BE425320C819CAFA5C77B278EEEAC17E9F"
+    }
+  ],
+  "gameFiles": [
+    {
+      "path": "GameAssembly.dll",
+      "sha256": "D9972B0E7F7DD1C17758808E2F1B80E0A728946416D9A41DEAA99BAD744DE53A"
+    },
+    {
+      "path": "HeroesOldenEra_Data/il2cpp_data/Metadata/global-metadata.dat",
+      "sha256": "99117DC93F4B427967A2FCA49378E1B39B3202401B15234A98328FAA7D489817"
+    }
+  ]
+}

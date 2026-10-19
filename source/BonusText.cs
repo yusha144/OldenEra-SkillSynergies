@@ -66,60 +66,14 @@ internal static class BonusText
         return changes;
     }
 
-    internal static string Preview(IReadOnlyList<SynergyHint> rowHints, IReadOnlyList<SynergyHint> newHints,
-        IEnumerable<Synergy> allLinks, HeroBuild hero, bool offeredPerk, bool compact = false)
-        => Render(PreviewValues(rowHints, newHints, allLinks, hero, offeredPerk), compact);
-
-    internal static (string Text, string RichText) NumericPreview(IReadOnlyList<SynergyHint> rowHints,
-        IReadOnlyList<SynergyHint> newHints, IEnumerable<Synergy> allLinks, HeroBuild hero, bool offeredPerk)
-    {
-        // The native perk card already supplies the effect and its restrictions. Repeat
-        // only distinct numeric changes; equal spell/creature healing shares one line.
-        var values = PreviewValues(rowHints, newHints, allLinks, hero, offeredPerk, numbersOnly: true)
-            .GroupBy(v => v.RichNumbers).Select(g => g.First()).ToArray();
-        return (string.Join("\n", values.Select(v => v.Numbers)), string.Join("\n", values.Select(v => v.RichNumbers)));
-    }
-
-    private static List<Rendered> PreviewValues(IReadOnlyList<SynergyHint> rowHints, IReadOnlyList<SynergyHint> newHints,
-        IEnumerable<Synergy> allLinks, HeroBuild hero, bool offeredPerk, bool numbersOnly = false)
-    {
-        var rendered = new List<Rendered>();
-        var visited = new HashSet<string>();
-        foreach (var hint in rowHints)
-            foreach (var change in hint.Link.Changes)
-            {
-                string perk = hint.Link.PerkId, key = change.Part.Key;
-                if (!visited.Add(perk + "|" + key)) continue;
-                decimal before = change.Base;
-                if (!offeredPerk)
-                    foreach (var link in allLinks.Where(l => l.PerkId == perk && l.RequiredSkills.All(hero.Skills.Contains)))
-                        before += link.Changes.Where(c => c.Part.Key == key).Sum(c => c.Added);
-                decimal total = newHints.Where(h => h.Link.PerkId == perk).Sum(h => h.Link.Changes.Where(c => c.Part.Key == key).Sum(c => c.Added));
-                decimal own = rowHints.Where(h => h.Link.PerkId == perk).Sum(h => h.Link.Changes.Where(c => c.Part.Key == key).Sum(c => c.Added));
-                string Comparison(bool rich)
-                {
-                    string Value(decimal value)
-                    {
-                        string number = Number(value, change.Part), color = NumberColor(change.Part);
-                        return rich && color != null ? "<color=#" + color + ">" + number + "</color>" : number;
-                    }
-                    return !change.Comparable ? (numbersOnly ? "до " : "устанавливается на ") + Value(change.Part.Value)
-                        : offeredPerk && own != total ? "ещё " + Value(own) + (numbersOnly ? "; всего " : "; бонус перка ") + Value(before + total)
-                        : "с " + Value(before) + " до " + Value(before + total);
-                }
-                rendered.Add(new Rendered { Part = change.Part, Numbers = Comparison(false), RichNumbers = Comparison(true) });
-            }
-        return rendered;
-    }
-
     internal static string Describe(IReadOnlyList<BonusChange> changes)
         => Render(changes.Select(c => new Rendered { Part = c.Part, Numbers = c.Comparable
             ? "с " + Number(c.Base, c.Part) + " до " + Number(c.Base + c.Added, c.Part)
             : "устанавливается на " + Number(c.Part.Value, c.Part) }).ToList());
 
-    private sealed class Rendered { internal BonusPart Part; internal string Numbers, RichNumbers; }
+    private sealed class Rendered { internal BonusPart Part; internal string Numbers; }
 
-    private static string NumberColor(BonusPart part)
+    internal static string NumberColor(BonusPart part)
     {
         // Color follows the structured stat ID, never a translated description or sign.
         // Key: type | allegiance | receivers | territory | stat [| extra parameters].
@@ -133,40 +87,23 @@ internal static class BonusText
             _ => null };
     }
 
-    private static string Render(List<Rendered> values, bool compact = false)
+    private static string Render(List<Rendered> values)
     {
         var lines = new List<string>();
-        var merged = new HashSet<Rendered>();
-        if (compact)
-        {
-            // One rule with two sources, not two independent +30% gains. Merge only
-            // matching numbers AND scope; keep rank/territory/different amounts separate.
-            foreach (var ability in values.Where(v => v.Part.Attribute == "Лечение и воскрешение способностями"
-                && v.Part.Subject == "дружественных существ"))
-            {
-                var spell = values.FirstOrDefault(v => !merged.Contains(v)
-                    && v.Part.Attribute == "Лечение и воскрешение заклинаниями" && v.Part.Subject == "героя"
-                    && v.Numbers == ability.Numbers && v.Part.Suffix == ability.Part.Suffix);
-                if (spell == null) continue;
-                lines.Add("Лечение и воскрешение: " + ability.Numbers + ability.Part.Suffix
-                    + ".\nЗаклинания героя и способности союзников.");
-                merged.Add(ability); merged.Add(spell);
-            }
-        }
         // Equal changes to several attributes share one sentence; scopes and coefficients must match.
-        foreach (var group in values.Where(v => !merged.Contains(v)).GroupBy(v => v.Numbers + "|" + v.Part.Subject + "|" + v.Part.Suffix))
+        foreach (var group in values.GroupBy(v => v.Numbers + "|" + v.Part.Subject + "|" + v.Part.Suffix))
         {
             var first = group.First();
             var names = group.Select(v => v.Part.Attribute).Distinct().ToArray();
             string label = string.Join(", ", names);
-            string subject = compact ? first.Part.Subject.Replace("дружественных существ", "союзников") : first.Part.Subject;
+            string subject = first.Part.Subject;
             string line = label + (subject.Length == 0 ? "" : " " + subject) + ": " + first.Numbers + first.Part.Suffix + ".";
             if (!lines.Contains(line)) lines.Add(line);
         }
         return string.Join("\n", lines);
     }
 
-    private static string Number(decimal value, BonusPart part)
+    internal static string Number(decimal value, BonusPart part)
     {
         if (part.Percent) value *= 100;
         string sign = value < 0 ? "-" : value > 0 && !part.Unsigned ? "+" : "";

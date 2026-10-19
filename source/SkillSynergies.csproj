@@ -1,9 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>disable</Nullable><LangVersion>latest</LangVersion>
-    <AssemblyName>OldenEra.SkillSynergies</AssemblyName><Version>0.1.11</Version>
-    <Authors>yusha144</Authors><Description>Olden Era Skill Synergies. Author: yusha144.</Description>
-    <GameRoot Condition="'$(GameRoot)' == ''">E:\Steam_M2\steamapps\common\Heroes of Might and Magic Olden Era</GameRoot>
+    <AssemblyName>OldenEra.SkillSynergies</AssemblyName><Version>0.1.15</Version>
+    <Description>Olden Era Skill Synergies.</Description>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="BepInEx.Core"><HintPath>$(GameRoot)\BepInEx\core\BepInEx.Core.dll</HintPath><Private>false</Private></Reference>
@@ -19,4 +18,8 @@
     <Reference Include="UnityEngine.UI"><HintPath>$(GameRoot)\BepInEx\interop\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Unity.TextMeshPro"><HintPath>$(GameRoot)\BepInEx\interop\Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
+  <Target Name="ValidateGameRoot" BeforeTargets="ResolveReferences">
+    <Error Condition="'$(GameRoot)' == ''" Text="Set GameRoot to your own Olden Era installation: -p:GameRoot=path" />
+    <Error Condition="!Exists('$(GameRoot)/BepInEx/interop/Hex.dll')" Text="BepInEx interop is missing. Run the supported game with BepInEx once, then close it." />
+  </Target>
 </Project>

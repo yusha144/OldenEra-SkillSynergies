@@ -1,0 +1,42 @@
+name: Ошибка в SkillSynergies
+description: Неверный расчёт, расположение подсказок, сбой мода или ошибка установщика.
+title: '[Ошибка] '
+body:
+  - type: input
+    id: mod_version
+    attributes:
+      label: Версия SkillSynergies
+      placeholder: 0.1.15
+    validations:
+      required: true
+  - type: input
+    id: game_version
+    attributes:
+      label: Steam build игры и версия BepInEx
+      placeholder: '25672315, BepInEx 6.0.0-be.788'
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как повторить
+      description: Герой, изученные навыки и перки, предложенный выбор, режим игры и действия по порядку. Если ошибка в установщике, укажите этап и полный текст ошибки.
+    validations:
+      required: true
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Ожидание и результат
+      description: Что должно было произойти и что произошло на самом деле.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Снимок и журнал
+      description: Приложите снимок и относящийся к проблеме фрагмент BepInEx/LogOutput.log. Уберите ненужные личные данные. Игровые DLL прикладывать не нужно.
+  - type: textarea
+    id: other_mods
+    attributes:
+      label: Другие установленные моды
+      description: Названия и версии, если известны.
