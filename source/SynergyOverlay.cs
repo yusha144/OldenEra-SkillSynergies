@@ -81,7 +81,7 @@ public sealed class SynergyOverlay : MonoBehaviour
     }
 
     [HideFromIl2Cpp]
-    private static bool IsVisible(BhLevelUpView window) => window && window.gameObject.activeInHierarchy && window.cvrc
+    private static bool IsVisible(BhLevelUpView window) => window && window.gameObject.activeInHierarchy && window.cvrd
         && window.canvas && window.canvas.isActiveAndEnabled && (!window.cg || window.cg.alpha > 0.01f);
 
     [HideFromIl2Cpp]
@@ -212,7 +212,7 @@ public sealed class SynergyOverlay : MonoBehaviour
         {
             ClearPanels();
             _lastContext = context;
-            Plugin.Instance.Log.LogInfo($"Level-up hints: hero {data.id}, arena={window.ckoc}, learned perks={hero.Perks.Count}, offers={_offers.Count}, related offers={_offers.Count(o => o.Hints.Count > 0)}, visible={_visible}.");
+            Plugin.Instance.Log.LogInfo($"Level-up hints: hero {data.id}, arena={window.ckoc}, learned perks={hero.Perks.Count}, offers={_offers.Count}, related offers={_offers.Count(o => o.Hints.Count > 0)}, visible={_visible}. Skills={string.Join(",", hero.Skills.OrderBy(id => id))}; perks={string.Join(",", hero.Perks.OrderBy(id => id))}; options={string.Join(",", _offers.Select(o => (o.IsPerk ? "perk:" : "skill:") + o.Id))}.");
         }
         float scale = Math.Clamp(Screen.height / 1080f, 0.75f, 2f);
         foreach (var panel in _panels.Values) { panel.Ui.Show(false); panel.Bounds = default; }

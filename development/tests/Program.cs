@@ -8,6 +8,7 @@ string Direct(JsonElement extra, JsonElement baseline) => BonusText.Describe(Bon
 string pluginAssembly = args.Length > 1 ? args[1] : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
     "../../../../../source/bin/Release/net6.0/OldenEra.SkillSynergies.dll"));
 InteropBoundaryChecks.Run(pluginAssembly, Check);
+ScreenStateChecks.Run(pluginAssembly);
 // Window lookup regression: the legacy singleton is null in this game build.
 // Registry entries may include unopened windows or destroyed/stale cached objects.
 bool Visible(string window) => window == "standard-open" || window == "arena-open";
