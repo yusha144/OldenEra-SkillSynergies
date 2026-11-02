@@ -2,13 +2,13 @@
 
 ## 1. Требования
 
-Windows x64 и установленная Heroes of Might and Magic: Olden Era, Steam build 25672315.
+Windows x64 и установленная Heroes of Might and Magic: Olden Era, Steam build 26321935.
 
 Для первой установки нужен интернет. Установщик загружает BepInEx Unity.IL2CPP 6.0.0-be.788 и базовые библиотеки Unity 6000.0.66 с серверов BepInEx, затем проверяет их SHA-256. Уже установленные совпадающие зависимости повторно не скачиваются.
 
 ## 2. Установка
 
-1. Скачайте [установочный архив OldenEra-SkillSynergies-0.1.15.zip](https://github.com/yusha144/OldenEra-SkillSynergies/releases/download/v0.1.15/OldenEra-SkillSynergies-0.1.15.zip).
+1. Скачайте [установочный архив OldenEra-SkillSynergies-0.1.16.zip](https://github.com/yusha144/OldenEra-SkillSynergies/releases/download/v0.1.16/OldenEra-SkillSynergies-0.1.16.zip).
 2. Полностью распакуйте его в отдельную папку вне каталога игры. В корне находятся `Install.bat`, `Uninstall.bat` и папка `_files`.
 3. Закройте игру и запустите `Install.bat` из корня распакованного архива.
 4. Проверьте путь к папке с `HeroesOldenEra.exe`. Если найдено несколько копий игры, выберите нужную. Если игра не найдена, введите путь.
@@ -33,7 +33,7 @@ DLL мода устанавливается в `BepInEx/plugins/SkillSynergies/O
 
 Откройте окно повышения уровня у героя с подходящим сочетанием. Рядом с вариантом выбора появляется плашка с эффектом и источником. F9 скрывает и показывает подсказки в этом окне.
 
-В `BepInEx/LogOutput.log` успешная загрузка отмечена строкой `Skill Synergies 0.1.15 loaded`. Сообщение `unsupported game build` означает несовместимость игровых файлов.
+В `BepInEx/LogOutput.log` успешная загрузка отмечена строкой `Skill Synergies 0.1.16 loaded`. Сообщение `unsupported game build` означает несовместимость игровых файлов.
 
 Начальная видимость и клавиша переключения меняются в [настройках](settings.md).
 

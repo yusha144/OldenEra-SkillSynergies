@@ -148,14 +148,14 @@ internal static class BonusText
                 && buff.TryGetProperty("data", out var data) && data.TryGetProperty("stats", out var stats))
             {
                 string neighbour = SynergyCatalog.Text(activation, "targetAllegiance");
-                if (neighbour is not ("ally" or "enemy")) return null;
+                if (neighbour is not ("ally" or "allynoself" or "enemy")) return null;
                 var result = new List<BonusPart>();
                 foreach (var stat in stats.EnumerateObject())
                 {
                     string label = stat.Name == "offence" ? "Атака" : stat.Name == "defence" ? "Защита" : null;
                     if (label == null) return null;
                     result.Add(Make("near|" + neighbour + "|" + stat.Name, label, stat.Value.GetRawText(), suffix:
-                        neighbour == "enemy" ? " за каждый соседний отряд противника" : " за каждый соседний дружественный отряд"));
+                        neighbour == "enemy" ? " за каждый соседний отряд противника" : neighbour == "allynoself" ? " за каждый соседний дружественный отряд" : " за каждый дружественный отряд в радиусе 1"));
                 }
                 return result;
             }
@@ -169,6 +169,9 @@ internal static class BonusText
             }
             return null;
         }
+        if (type == "startBattleUnitsCountPerTierBonus" && p.Length == 3 && p[0] == "temp"
+            && int.TryParse(p[1], out int tier) && tier is >= 1 and <= 7 && receivers.Length == 0 && allegiance == "" && area == "")
+            return One(Make("temporary|" + tier, "Временные существа " + tier + "-го ранга", p[2], true, " в начале боя", subject: ""));
         if (type == "sideRes" && p.Length == 2) return p[0] switch {
             "gold" => One(Make("gold", "Золото", p[1], suffix: " в день")),
             "dust" => One(Make("dust", "Алхимическая пыль", p[1], suffix: " в день")), _ => null };
@@ -178,6 +181,8 @@ internal static class BonusText
         string key = p[0];
         if (type == "unitStat")
         {
+            if (key == "modifierSet" && p.Length == 4 && p[1] == "inDmgMods" && p[2] == "hero_strike_damage")
+                return One(Make("heroStrikeDamage", "Получаемый урон героического удара", p[3], true));
             if (key == "modifierSet" && p.Length == 4 && p[1] == "inDmgMods" && p[2] == "magic_damage")
                 return One(Make("magicDamage", "Получаемый магический урон", p[3], true));
             if (p.Length != 2) return null;
@@ -216,6 +221,7 @@ internal static class BonusText
             return One(Make(key + "|" + p[1], "Сила магии заклинаний школы «" + magicSchool + "»", p[2]));
         if (p.Length != 2) return null;
         return key switch {
+            "restoreBattleLossesBonusPercent" => One(Make(key, "Восстановление потерь", p[1], true, " после боя", subject: "")),
             "offence" => One(Make(key, "Атака", p[1], subject: heroSubject)), "defence" => One(Make(key, "Защита", p[1], subject: heroSubject)),
             "spellPower" => One(Make(key, "Сила магии", p[1], subject: heroSubject)), "intelligence" => One(Make(key, "Знания", p[1], subject: heroSubject)),
             "spellPowerPer" => One(Make(key, "Сила магии", p[1], true, subject: heroSubject)),

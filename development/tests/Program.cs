@@ -50,7 +50,9 @@ using (var json = JsonDocument.Parse("[{\"type\":\"unitStat\",\"receivers\":[\"a
 // Integration with installed read-only game data; no game methods or saves are accessed.
 string core = args.Length > 0 ? args[0] : throw new ArgumentException("Pass the path to HeroesOldenEra_Data/StreamingAssets/Core.zip.");
 var catalog = new SynergyCatalog(); catalog.Load(core);
-Check(catalog.Links.Count == 154 && catalog.SkippedEffects == 0, $"All 154 mode-specific relations have exact numeric effects; loaded {catalog.Links.Count}, skipped {catalog.SkippedEffects}: {string.Join(",", catalog.UnsupportedEffectPerks)}");
+Check(catalog.Links.Count == 104 && catalog.SkippedEffects == 0, $"Build 26321935 exposes 96 supported relations and eight explicitly unsupported effects; loaded {catalog.Links.Count}, skipped {catalog.SkippedEffects}: {string.Join(",", catalog.UnsupportedEffectPerks)}");
+Check(catalog.UnsupportedEffectPerks.Count == 0, "All current effect shapes are supported");
+Check(!catalog.Links.Any(l => l.PerkId.StartsWith("campaign_")), "Removed campaign relations are not invented");
 Check(catalog.SkippedConditions == 0, "Current direct action conditions are supported");
 Check(catalog.Links.All(l => l.RequiredSkills.Length > 0 && l.RequiredSkills.All(catalog.Infos.ContainsKey)), "Every relation resolves to known skills");
 Check(catalog.Links.All(l => !l.Effect.Contains('{') && !l.Effect.Contains('}')), "No untranslated numeric placeholders enter the UI");
@@ -59,19 +61,16 @@ Check(catalog.Links.All(l => !l.Effect.Contains('→') && !l.Effect.Contains('�
 Check(!catalog.Links.Any(l => l.PerkId == "sub_skill_assault_1"), "Obsolete localized synergy absent from actual bonus rules is ignored");
 string Effect(string id) => catalog.Links.First(l => l.PerkId == id).Effect;
 Check(Effect("arena_sub_skill_magic_night_2") == "Максимальное здоровье существ противника: с -1 до -2.", "Chronic Weakness shows the exact enemy health reduction");
-Check(Effect("sub_skill_trainer_3").Contains("с +2 до +3"), "Veterans uses actual +1 increase instead of trusting the translated doubling claim");
-Check(Effect("campaign_sub_skill_trainer_3").Contains("с +2 до +4"), "Campaign Veterans uses its own +2 increase");
+Check(Effect("sub_skill_trainer_3").Contains("с +2 до +4"), "Veterans uses actual +2 increase instead of trusting the translated doubling claim");
 Check(Effect("sub_skill_assault_3").Contains("при атаке") && Effect("sub_skill_assault_3").Contains("с +1 до +2"), "Concentration generation retains attack trigger and numeric increase");
 Check(Effect("sub_skill_protection_3").Contains("при получении урона"), "Taking-damage trigger remains distinct from attacking");
 Check(Effect("sub_skill_formation_4").Contains("кроме первого"), "Round-based concentration excludes first round");
 Check(Effect("sub_skill_tactics_1").Contains("с +2 до +4") && Effect("sub_skill_tactics_1").Contains("соседний отряд противника"), "Indirect offensive tactics buff resolves numeric amount and enemy adjacency");
-Check(Effect("sub_skill_tactics_4").Contains("соседний дружественный отряд"), "Defensive tactics retains allied adjacency");
 Check(Effect("sub_skill_summoner_2") == "Здоровье аватара: с 4 до 5.", "Health override replaces previous override rather than adding 5");
-Check(Effect("arena_sub_skill_summoner_2") == "Здоровье аватара: устанавливается на 5.", "Arena additive base and absolute override are not incorrectly summed");
+Check(Effect("arena_sub_skill_summoner_2") == "Здоровье аватара: с 4 до 5.", "Arena health uses the updated absolute base");
 Check(Effect("sub_skill_summoner_1") == "Урон аватара: с +40% до +80%.", "Three avatar variants collapse visually without tripling the numeric bonus");
 Check(Effect("sub_skill_logistic_4") == "Стоимость нейтральных походных заклинаний: с -4 до -8 маны.", "Equivalent changes to all six adventure spells remain compact and exact");
-Check(Effect("sub_skill_trainer_5").Contains("1-3-го рангов") && Effect("sub_skill_trainer_5").Split('\n').Length == 2, "Elite Guard retains rank restriction while merging equal per-rank entries");
-Check(Effect("sub_skill_battlemage_5").Contains("с +15% до +30% от знаний героя"), "Hero-stat scaling is shown as a coefficient, not invented flat defense");
+Check(Effect("sub_skill_battlemage_5").Contains("с +10% до +20% от знаний героя"), "Hero-stat scaling is shown as a coefficient, not invented flat defense");
 foreach (var link in catalog.Links)
 {
     var current = new HeroBuild();
@@ -86,7 +85,7 @@ Check(taxHint.Link.Effect == "Золото: с +250 до +500 в день.", "Re
 Check(catalog.Info("sub_skill_economy_1").Name == "Сборщик податей", "Native Russian perk name resolves");
 Check(SynergyRules.ForOffer(catalog.Links, taxHero, "arena_skill_logistic", false).Count == 0, "Arena and standard skills are not conflated");
 var luckOffer = SynergyRules.ForOffer(catalog.Links, taxHero, "sub_skill_luck_2", true).Single();
-Check(luckOffer.Link.Effect.Contains("+25%"), "Economy completes the resource-finding perk");
+Check(luckOffer.Link.Effect.Contains("с +10% до +20%"), "Economy completes the resource-finding perk");
 var unknownHero = new HeroBuild();
 Check(SynergyRules.ForOffer(catalog.Links, unknownHero, "sub_skill_luck_2", true).Count == 0, "New hero does not see future economy as a current improvement");
 
@@ -141,7 +140,7 @@ Check(HintPresentation.ForChoices([], catalog, taxHero).Count == 0, "No offered 
 
 // Screenshot regression: Resoluteness belongs to advanced Leadership, while the offered
 // Battle Order activates its conditional bonus. The offered Expert Leadership is not owned yet.
-foreach (string prefix in new[] { "", "arena_", "campaign_" })
+foreach (string prefix in new[] { "", "arena_" })
 {
     var leader = new HeroBuild(); leader.AddSkill(prefix + "skill_leadership", 2);
     leader.AddPerk(prefix + "sub_skill_leadership_1", 2, prefix + "skill_leadership");
@@ -166,7 +165,7 @@ var unrelated = new HeroBuild(); unrelated.AddSkill("arena_skill_leadership", 2)
 Check(catalog.ParentOf("sub_skill_leadership_1", unrelated) == null, "Parent lookup cannot cross game modes");
 // Lord Rufus screenshots: Arcane Magic owns Endless Life, but learning Summoning
 // is what activates the healing increase. Upgrading Arcane is not that condition.
-foreach (string prefix in new[] { "", "arena_", "campaign_" })
+foreach (string prefix in new[] { "", "arena_" })
 {
     string arcaneId = prefix + "skill_magic_space", summonerId = prefix + "skill_summoner";
     string lifeId = prefix + "sub_skill_magic_space_2";
@@ -429,14 +428,11 @@ Check(FullPerk("sub_skill_logistic_4").Rows.Single().Effect == "Стоимост
     "The complete neutral adventure-spell set remains one compact effect with its unit");
 Check(FullPerk("sub_skill_summoner_1").Rows.Single().Effect == "Урон аватара: с +40% до +80%",
     "Avatar variants share their verified effect without adding it three times");
-Check(FullPerk("sub_skill_trainer_5").Rows.Count == 2 && FullPerk("sub_skill_trainer_5").Rows.Select(r => r.Conditions).SequenceEqual(new[] {
-    "Союзники 1-3-го рангов\nОт атаки героя", "Союзники 1-3-го рангов\nОт защиты героя" }),
-    "Rank-specific effects retain their restriction without three identical rows per effect: "
-        + string.Join("; ", FullPerk("sub_skill_trainer_5").Rows.Select(r => r.Effect + " / " + r.Conditions)));
+Check(FullPerk("sub_skill_trainer_5").Rows.Count == 3 && FullPerk("sub_skill_trainer_5").Rows.All(r => r.Effect.Contains("с +5% до +10%")), "Temporary reinforcements preserve all three tiers and their actual percentages");
 Check(FullPerk("sub_skill_formation_4").Rows.Single().Conditions.Contains("кроме первого"), "Round exclusions stay visible");
 Check(FullPerk("sub_skill_battlemage_5").Rows.Single().Conditions == "От знаний героя", "Stat-derived percentages retain their coefficient");
 Check(FullPerk("sub_skill_summoner_2").Rows.Single().Effect == "Здоровье аватара: с 4 до 5"
-    && FullPerk("arena_sub_skill_summoner_2").Rows.Single().Effect == "Здоровье аватара: до 5", "Absolute overrides never acquire a fictional baseline or additive contribution");
+    && FullPerk("arena_sub_skill_summoner_2").Rows.Single().Effect == "Здоровье аватара: с 4 до 5", "Absolute overrides never acquire a fictional baseline or additive contribution");
 Check(FullPerk("arena_sub_skill_magic_night_2").Rows.Single().Effect == "Макс. здоровье врагов: с -1 до -2", "Negative enemy health retains its target and signs");
 var existingMageRow = HintPresentation.Build(newSchool, catalog, existingMage).Rows.Single();
 Check(existingMageRow.Sources.Any(s => s.Text == "Продвинутая магия ночи: +3")

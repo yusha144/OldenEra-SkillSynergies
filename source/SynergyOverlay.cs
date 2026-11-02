@@ -81,7 +81,7 @@ public sealed class SynergyOverlay : MonoBehaviour
     }
 
     [HideFromIl2Cpp]
-    private static bool IsVisible(BhLevelUpView window) => window && window.gameObject.activeInHierarchy && window.cszv
+    private static bool IsVisible(BhLevelUpView window) => window && window.gameObject.activeInHierarchy && window.cvrc
         && window.canvas && window.canvas.isActiveAndEnabled && (!window.cg || window.cg.alpha > 0.01f);
 
     [HideFromIl2Cpp]
@@ -101,18 +101,18 @@ public sealed class SynergyOverlay : MonoBehaviour
     [HideFromIl2Cpp]
     private static IEnumerable<BhLevelUpView> RegisteredWindows()
     {
-        // BhLevelUpView.cild is never assigned by the current game binary. Both game modes
-        // open a registered BhLevelUpView via cpo instead. Reading the registry does not create UI.
-        var manager = cpo.ccog;
+        // Read registered windows in both game modes without creating UI.
+        // The legacy singleton is optional.
+        var manager = cqo.cvrr;
         if (manager == null) yield break;
-        if (manager.ccoh != null)
-            foreach (var pair in manager.ccoh)
+        if (manager.ceom != null)
+            foreach (var pair in manager.ceom)
             {
                 var window = pair.Value?.TryCast<BhLevelUpView>();
                 if (window) yield return window;
             }
-        if (manager.ccoi != null)
-            foreach (var screen in manager.ccoi)
+        if (manager.ceon != null)
+            foreach (var screen in manager.ceon)
             {
                 var window = screen?.TryCast<BhLevelUpView>();
                 if (window) yield return window;
@@ -130,15 +130,15 @@ public sealed class SynergyOverlay : MonoBehaviour
     [HideFromIl2Cpp]
     private void Refresh(BhLevelUpView window)
     {
-        var data = (window.cile?.chpd ?? window.cilf)?.chna;
+        var data = (window.cknw?.cjrs ?? window.cknx)?.cjpp;
         if (data?.skills?.list == null)
         { _ui?.Show(false); Diagnostic("Registered level-up window is open; waiting for hero skill data."); return; }
         var sample = window.currentLevel;
         // Use the card's regular native font, rather than the bold level-ribbon style.
-        if (window.cile?.chpe?.TryCast<dzq>() != null && window.statsAndSkillsView?.skillViews != null)
+        if (window.cknw?.cjrt?.TryCast<eau>() != null && window.statsAndSkillsView?.skillViews != null)
             foreach (var view in window.statsAndSkillsView.skillViews)
                 if (IsElementVisible(view) && view.title && view.title.font) { sample = view.title; break; }
-        if (window.cile?.chpe?.TryCast<dzr>() != null && window.subSkillsView?.subSkillViews != null)
+        if (window.cknw?.cjrt?.TryCast<eav>() != null && window.subSkillsView?.subSkillViews != null)
             foreach (var view in window.subSkillsView.subSkillViews)
                 if (IsElementVisible(view) && view.title && view.title.font) { sample = view.title; break; }
         if (!sample || !sample.font)
@@ -149,7 +149,7 @@ public sealed class SynergyOverlay : MonoBehaviour
             _ui?.Destroy();
             _ui = new NativeUi(window.transform.Cast<RectTransform>(), sample);
             _owner = window.Pointer; _lastContext = "";
-            Diagnostic($"Attached skill hints to registered level-up window; arena={window.cilk}, legacy singleton present={(bool)BhLevelUpView.cild}.");
+            Diagnostic($"Attached skill hints to registered level-up window; arena={window.ckoc}, legacy singleton present={(bool)BhLevelUpView.cknv}.");
         }
         _ui.Show(true);
         var hero = new HeroBuild();
@@ -169,8 +169,8 @@ public sealed class SynergyOverlay : MonoBehaviour
         // Only the current stage's choice list; nested preview icons and old animation stages
         // must not become additional offers or create duplicate annotations.
         _choicePointers.Clear();
-        bool skillStage = window.cile?.chpe?.TryCast<dzq>() != null;
-        bool perkStage = window.cile?.chpe?.TryCast<dzr>() != null;
+        bool skillStage = window.cknw?.cjrt?.TryCast<eau>() != null;
+        bool perkStage = window.cknw?.cjrt?.TryCast<eav>() != null;
         if (skillStage && window.statsAndSkillsView?.skillViews != null)
             foreach (var view in window.statsAndSkillsView.skillViews) if (view) _choicePointers.Add(view.Pointer);
         if (perkStage && window.subSkillsView?.subSkillViews != null)
@@ -179,15 +179,15 @@ public sealed class SynergyOverlay : MonoBehaviour
         {
             if (!IsElementVisible(view)) continue;
             Box bounds = ReadCard(view.transform);
-            if (!_choicePointers.Contains(view.Pointer) || !view.isSelectable || view.cikp?.chrk == null || !bounds.Valid) continue;
-            AddOffer(view.cikp.chrk.sid, false, bounds, hero, view.cikp.chrk.level);
+            if (!_choicePointers.Contains(view.Pointer) || !view.isSelectable || view.cknh?.cjtz == null || !bounds.Valid) continue;
+            AddOffer(view.cknh.cjtz.sid, false, bounds, hero, view.cknh.cjtz.level);
         }
         foreach (var view in _perks)
         {
             if (!IsElementVisible(view)) continue;
             Box bounds = ReadCard(view.transform);
-            if (!_choicePointers.Contains(view.Pointer) || view.cikv?.chrv == null || !bounds.Valid || (view.empty && view.empty.activeInHierarchy)) continue;
-            AddOffer(view.cikv.chrv.sid, true, bounds, hero);
+            if (!_choicePointers.Contains(view.Pointer) || view.cknn?.cjuk == null || !bounds.Valid || (view.empty && view.empty.activeInHierarchy)) continue;
+            AddOffer(view.cknn.cjuk.sid, true, bounds, hero);
         }
         foreach (var button in _buttons)
         {
@@ -202,9 +202,9 @@ public sealed class SynergyOverlay : MonoBehaviour
         ReadObstacle(window.currentLevel.transform);
         var frame = PanelLayout.WindowFrame(PanelLayout.Group(_offers.Select(o => o.Bounds)), VisibleImages(window.transform));
         if (frame.Valid) _obstacles.Add(frame);
-        if (!window.cilk) ReadMapHud();
+        if (!window.ckoc) ReadMapHud();
         if (_offers.Count == 0)
-            Diagnostic($"Waiting for offered cards: skill views={_skills.Count}, perk views={_perks.Count}, arena={window.cilk}.");
+            Diagnostic($"Waiting for offered cards: skill views={_skills.Count}, perk views={_perks.Count}, arena={window.ckoc}.");
         string context = data.id + ":" + (perkStage ? "perks:" : "skills:") + string.Join(",", _offers.Select(o => o.Id).OrderBy(id => id))
             + ":" + string.Join(",", hero.SkillLevels.OrderBy(pair => pair.Key).Select(pair => pair.Key + "=" + pair.Value)) + ":" + string.Join(",", hero.Perks.OrderBy(id => id))
             + ":" + string.Join(",", hero.TemporaryPerks.OrderBy(id => id));
@@ -212,7 +212,7 @@ public sealed class SynergyOverlay : MonoBehaviour
         {
             ClearPanels();
             _lastContext = context;
-            Plugin.Instance.Log.LogInfo($"Level-up hints: hero {data.id}, arena={window.cilk}, learned perks={hero.Perks.Count}, offers={_offers.Count}, related offers={_offers.Count(o => o.Hints.Count > 0)}, visible={_visible}.");
+            Plugin.Instance.Log.LogInfo($"Level-up hints: hero {data.id}, arena={window.ckoc}, learned perks={hero.Perks.Count}, offers={_offers.Count}, related offers={_offers.Count(o => o.Hints.Count > 0)}, visible={_visible}.");
         }
         float scale = Math.Clamp(Screen.height / 1080f, 0.75f, 2f);
         foreach (var panel in _panels.Values) { panel.Ui.Show(false); panel.Bounds = default; }
@@ -311,11 +311,11 @@ public sealed class SynergyOverlay : MonoBehaviour
     {
         // Read the existing HUD screens only. Their canvas roots can cover the whole
         // screen, so use the visible side-panel graphics instead of those holders.
-        var manager = cpo.ccog;
+        var manager = cqo.cvrr;
         if (manager == null) return;
         var visited = new HashSet<IntPtr>();
-        if (manager.ccoh != null) foreach (var pair in manager.ccoh) ReadHudScreen(pair.Value?.TryCast<BhScreen>(), visited);
-        if (manager.ccoi != null) foreach (var screen in manager.ccoi) ReadHudScreen(screen?.TryCast<BhScreen>(), visited);
+        if (manager.ceom != null) foreach (var pair in manager.ceom) ReadHudScreen(pair.Value?.TryCast<BhScreen>(), visited);
+        if (manager.ceon != null) foreach (var screen in manager.ceon) ReadHudScreen(screen?.TryCast<BhScreen>(), visited);
     }
 
     // Keep this as an explicitly hidden method. A capturing local function creates

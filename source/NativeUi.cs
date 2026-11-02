@@ -281,7 +281,7 @@ internal sealed class NativeUi
     {
         if (string.IsNullOrEmpty(id)) return null;
         if (_sprites.TryGetValue(id, out var cached) && cached) return cached;
-        var atlas = cnh.cbwr?.cbws;
+        var atlas = coh.cdwd?.cdwe;
         if (atlas != null && atlas.TryGetValue(id, out var sprite) && sprite) { _sprites[id] = sprite; return sprite; }
         return null;
     }

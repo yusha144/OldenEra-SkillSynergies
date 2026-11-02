@@ -67,7 +67,7 @@ internal static class PanelLayout
                     {
                         float free = right ? width - margin - edge - gap : edge - gap - margin;
                         // Fit the corridor before a side HUD instead of rejecting every
-                        // standard width that crosses it. Never jump past that HUD.
+                        // standard width that crosses iv. Never jump past that HUD.
                         foreach (var obstacle in obstacles)
                         {
                             var blocked = obstacle.Expand(4 * scale);
