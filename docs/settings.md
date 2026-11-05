@@ -45,7 +45,7 @@ SkillSynergies = F9 + LeftControl
 
 Сообщения находятся в `BepInEx/LogOutput.log`.
 
-- `Skill Synergies 0.1.17 loaded`: DLL загружена, каталог сочетаний прочитан.
+- `Skill Synergies 0.1.18 loaded`: DLL загружена, каталог сочетаний прочитан.
 - `Skill hint updater running`: обработчик подсказок начал работу.
 - `Level-up hints`: сведения о текущем выборе и найденных сочетаниях.
 - `unsupported game build`: игровые файлы отличаются от поддерживаемой сборки.
