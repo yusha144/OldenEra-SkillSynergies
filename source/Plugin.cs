@@ -6,7 +6,7 @@ using System.Security.Cryptography;
 
 namespace OldenEra.SkillSynergies;
 
-[BepInPlugin("local.oldenera.skillsynergies", "Olden Era Skill Synergies", "0.1.17")]
+[BepInPlugin("local.oldenera.skillsynergies", "Olden Era Skill Synergies", "0.1.18")]
 public sealed class Plugin : BasePlugin
 {
     internal static Plugin Instance;
@@ -20,12 +20,12 @@ public sealed class Plugin : BasePlugin
         ToggleKey = HotkeySettings.Load("SkillSynergies");
         try
         {
-            if (!Matches("GameAssembly.dll", "20AD026C2E10ABFCB17320E8174B611551857B5D97D59BEBC29142B28CA45CB3")
-                || !Matches("HeroesOldenEra_Data/il2cpp_data/Metadata/global-metadata.dat", "BB50ABC2B3CBFCFA61617674A723761A5542831C263A34C6A70486840863F846"))
-            { Log.LogWarning("Skill Synergies disabled: unsupported game build (expected Steam 26321935)."); return; }
+            if (!Matches("GameAssembly.dll", "D5C932FC0E22BE3049204773CF2A9CC57F6A84D08540921D99506D53B96386E2")
+                || !Matches("HeroesOldenEra_Data/il2cpp_data/Metadata/global-metadata.dat", "C40298DE4A952A0CE5158BF07C392335EEA1F6B39B544101FF04B974794D1105"))
+            { Log.LogWarning("Skill Synergies disabled: unsupported game build (expected Steam 26428102)."); return; }
             Catalog.Load(Path.Combine(Paths.GameRootPath, "HeroesOldenEra_Data", "StreamingAssets", "Core.zip"));
             AddComponent<SynergyOverlay>();
-            Log.LogInfo($"Skill Synergies 0.1.17 loaded: {Catalog.Links.Count} numeric combinations, {Catalog.SkippedConditions} unsupported condition groups and {Catalog.SkippedEffects} unsupported effects skipped. Effect summaries with separate conditions, source contributions and native perk/skill icons. Initial visibility={Enabled.Value}. Toggle={ToggleKey.Value}; configure OldenEra.hotkeys.cfg.");
+            Log.LogInfo($"Skill Synergies 0.1.18 loaded: {Catalog.Links.Count} numeric combinations, {Catalog.SkippedConditions} unsupported condition groups and {Catalog.SkippedEffects} unsupported effects skipped. Effect summaries with separate conditions, source contributions and native perk/skill icons. Initial visibility={Enabled.Value}. Toggle={ToggleKey.Value}; configure OldenEra.hotkeys.cfg.");
             if (Catalog.UnsupportedEffectPerks.Count > 0) Log.LogWarning("Unsupported perk effects: " + string.Join(", ", Catalog.UnsupportedEffectPerks));
         }
         catch (Exception error) { Log.LogError($"Skill Synergies could not start: {error}"); }

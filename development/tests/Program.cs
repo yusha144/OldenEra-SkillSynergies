@@ -51,7 +51,7 @@ using (var json = JsonDocument.Parse("[{\"type\":\"unitStat\",\"receivers\":[\"a
 // Integration with installed read-only game data; no game methods or saves are accessed.
 string core = args.Length > 0 ? args[0] : throw new ArgumentException("Pass the path to HeroesOldenEra_Data/StreamingAssets/Core.zip.");
 var catalog = new SynergyCatalog(); catalog.Load(core);
-Check(catalog.Links.Count == 104 && catalog.SkippedEffects == 0, $"Build 26321935 exposes 96 supported relations and eight explicitly unsupported effects; loaded {catalog.Links.Count}, skipped {catalog.SkippedEffects}: {string.Join(",", catalog.UnsupportedEffectPerks)}");
+Check(catalog.Links.Count == 104 && catalog.SkippedEffects == 0, $"Build 26428102 exposes 104 supported relations; loaded {catalog.Links.Count}, skipped {catalog.SkippedEffects}: {string.Join(",", catalog.UnsupportedEffectPerks)}");
 Check(catalog.UnsupportedEffectPerks.Count == 0, "All current effect shapes are supported");
 Check(!catalog.Links.Any(l => l.PerkId.StartsWith("campaign_")), "Removed campaign relations are not invented");
 Check(catalog.SkippedConditions == 0, "Current direct action conditions are supported");

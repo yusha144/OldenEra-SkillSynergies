@@ -17,9 +17,9 @@ internal static class ScreenStateChecks
             if (reader.GetString(owner.Namespace) == "Hex.UI" && reader.GetString(owner.Name) == "BhScreen")
                 methods.Add(reader.GetString(member.Name));
         }
-        // udg reads the open flag. udd is a different virtual property that returns true.
-        if (!methods.Contains("udg") || methods.Contains("udd"))
-            throw new Exception("Compiled screen visibility must read BhScreen.udg, never the constant BhScreen.udd");
+        // udl reads the open flag. udi is a different virtual property that returns true.
+        if (!methods.Contains("udl") || methods.Contains("udi"))
+            throw new Exception("Compiled screen visibility must read BhScreen.udl, never the constant BhScreen.udi");
         Console.WriteLine("PASS: compiled window state uses the real open flag");
     }
 }
