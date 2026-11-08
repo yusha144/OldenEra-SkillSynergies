@@ -50,7 +50,7 @@
 
 [Сообщить об ошибке](https://github.com/yusha144/OldenEra-SkillSynergies/issues/new?template=bug_report.yml) · [Предложить улучшение](https://github.com/yusha144/OldenEra-SkillSynergies/discussions/categories/ideas) · [Обсуждение](https://github.com/yusha144/OldenEra-SkillSynergies/discussions/categories/general) · [Вопрос по установке](https://github.com/yusha144/OldenEra-SkillSynergies/discussions/categories/q-a)
 
-Для связи с автором в Discord используйте имя `@yusha144`.
+Для связи с автором в Discord используйте имя `yusha144`.
 
 ## Исходники и лицензия
 
