@@ -6,7 +6,7 @@ if ($SourceArchive) {
     Write-Host 'https://github.com/yusha144/OldenEra-SkillSynergies/releases/latest'
     $launcher = 'Install.bat'
     if ($Uninstall) { $launcher = 'Uninstall.bat' }
-    Write-Host ('Полностью распакуйте архив и запустите ' + $launcher + ' из корня, рядом с папкой _files.')
+    Write-Host ('Полностью распакуйте архив и запустите ' + $launcher + ' из корня распакованного архива.')
     Write-Host 'Файлы игры не изменены.'
     exit 1
 }
@@ -30,15 +30,15 @@ try {
         elseif ($NonInteractive) { throw 'Укажите папку игры через -GamePath.' }
         elseif ($found.Count -gt 1) {
             for ($i=0; $i -lt $found.Count; $i++) { Write-Host "$($i+1). $($found[$i])" }
-            $choice = Read-Host 'Номер нужной игры (Enter для отмены)'
+            $choice = Read-Host 'Game number, Enter to cancel / Номер игры, Enter для отмены'
             $index=0
             if (![int]::TryParse($choice,[ref]$index) -or $index -lt 1 -or $index -gt $found.Count) { throw 'Отменено.' }
             $GamePath = $found[$index-1]
-        } else { $GamePath = (Read-Host 'Путь к папке с HeroesOldenEra.exe').Trim().Trim('"') }
+        } else { $GamePath = (Read-Host 'Folder containing HeroesOldenEra.exe / Папка с HeroesOldenEra.exe').Trim().Trim('"') }
     }
     if ([string]::IsNullOrWhiteSpace($GamePath)) { throw 'Отменено.' }
     $GamePath = [IO.Path]::GetFullPath($GamePath).TrimEnd('\')
-    Write-Host "Папка игры: $GamePath"
+    Write-Host "Game folder / Папка игры: $GamePath"
     if (!$VerifyOnly -and (Get-Process -Name HeroesOldenEra -ErrorAction SilentlyContinue)) { throw 'Закройте игру и повторите.' }
     if ($Uninstall) {
         if (!(Test-Path -LiteralPath (Join-PackPath $GamePath 'HeroesOldenEra.exe') -PathType Leaf)) { throw 'Это не папка Olden Era.' }
@@ -54,10 +54,18 @@ try {
         Write-Host 'Ничего менять не нужно.' -ForegroundColor Green
     } else {
         if (!$NonInteractive) {
-            $action = 'Установить SkillSynergies'
-            if ($Uninstall) { $action = 'Удалить SkillSynergies' }
-            if ($RemoveSettings) { $action += ' вместе с его настройками' }
-            if ((Read-Host ($action + ' в указанной папке? Д/Н')) -notmatch '^(д|да|y|yes)$') { throw 'Отменено.' }
+            $action = 'Install SkillSynergies / Установить SkillSynergies'
+            if ($Uninstall) {
+                $action = 'Uninstall SkillSynergies / Удалить SkillSynergies'
+                if ($RemoveSettings) {
+                    $action = 'Uninstall SkillSynergies and its settings / Удалить SkillSynergies вместе с настройками'
+                }
+            }
+            Write-Host ('1 - ' + $action)
+            Write-Host '2 - Cancel / Отмена'
+            if ((Read-Host 'Choose 1 or 2 / Введите 1 или 2').Trim() -notmatch '^(1|y|yes|д|да)$') {
+                throw 'Canceled / Отменено.'
+            }
         }
         if ($Uninstall) {
             if (Get-Process -Name HeroesOldenEra -ErrorAction SilentlyContinue) { throw 'Закройте игру и повторите.' }

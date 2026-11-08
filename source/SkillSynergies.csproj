@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>disable</Nullable><LangVersion>latest</LangVersion>
-    <AssemblyName>OldenEra.SkillSynergies</AssemblyName><Version>0.1.18</Version>
+    <AssemblyName>OldenEra.SkillSynergies</AssemblyName><Version>0.1.19</Version>
     <Description>Olden Era Skill Synergies.</Description>
   </PropertyGroup>
   <ItemGroup>

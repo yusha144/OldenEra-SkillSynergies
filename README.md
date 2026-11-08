@@ -4,7 +4,7 @@
 
 **Версия 0.1.18.** Windows x64, Steam build 26428102, Unity 6000.0.66, BepInEx Unity.IL2CPP 6.0.0-be.788.
 
-[Скачать установщик 0.1.18](https://github.com/yusha144/OldenEra-SkillSynergies/releases/download/v0.1.18/OldenEra-SkillSynergies-0.1.18.zip) · [Все выпуски](https://github.com/yusha144/OldenEra-SkillSynergies/releases)
+[Скачать установщик 0.1.19](https://github.com/yusha144/OldenEra-SkillSynergies/releases/download/v0.1.19/OldenEra-SkillSynergies-0.1.18.zip) · [Все выпуски](https://github.com/yusha144/OldenEra-SkillSynergies/releases)
 
 Скачайте установочный ZIP по ссылке выше и распакуйте его целиком. Закройте игру и запустите `Install.bat` из распакованного архива.
 
